@@ -207,6 +207,10 @@ class PhoneManager {
         await runCmd(`${adb} shell input keyevent 26`);
         console.log(`${phone.name}: Da bat man hinh mac dinh`);
 
+        // Ket noi ws-scrcpy de stream man hinh
+        await runCmd(`docker exec ws-scrcpy adb connect localhost:${phone.port}`);
+        console.log(`${phone.name}: Da ket noi ws-scrcpy`);
+
         const dev = phone.device;
         await runCmd(`${adb} shell setprop ro.kernel.qemu 0`);
         await runCmd(`${adb} shell setprop ro.boot.qemu 0`);
