@@ -162,10 +162,6 @@ class PhoneManager {
         ExposedPorts: { '5555/tcp': {} },
         Cmd: [
           'androidboot.redroid_gpu_mode=guest',
-          'ro.product.cpu.abilist=x86_64,arm64-v8a,x86,armeabi-v7a,armeabi',
-          'ro.product.cpu.abilist64=x86_64,arm64-v8a',
-          'ro.product.cpu.abilist32=x86,armeabi-v7a,armeabi',
-          'ro.dalvik.vm.native.bridge=libhoudini.so',
           `ro.product.model=${dev.model}`,
           `ro.product.brand=${dev.brand}`,
           `ro.product.manufacturer=${dev.brand}`,
