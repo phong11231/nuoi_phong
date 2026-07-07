@@ -605,11 +605,10 @@
     // === OPEN PHONE ===
     function openPhone(port, name) {
       const host = window.location.hostname;
-      // Redroid emulator ID: 5554 cho port 5555, 5556 cho port 5557, ...
-      var emulatorId = 'emulator-' + (port - 1);
-      var udid = emulatorId;
-      var wsParam = encodeURIComponent('ws://' + host + ':8000/?action=proxy-adb&remote=tcp%3A8886&udid=' + emulatorId);
-      var url = 'http://' + host + ':8000/#!action=stream&udid=' + udid + '&player=broadway&ws=' + wsParam;
+      // Port 5555 -> emulator-5554 (auto-detect), port khac -> localhost:port
+      var udid = (port === 5555) ? 'emulator-5554' : 'localhost:' + port;
+      var wsParam = encodeURIComponent('ws://' + host + ':8000/?action=proxy-adb&remote=tcp%3A8886&udid=' + udid);
+      var url = 'http://' + host + ':8000/#!action=stream&udid=' + encodeURIComponent(udid) + '&player=broadway&ws=' + wsParam;
       document.getElementById('viewerTitle').textContent = name || 'Phone';
       document.getElementById('viewerFrame').src = url;
       document.getElementById('viewerModal').classList.add('active');
