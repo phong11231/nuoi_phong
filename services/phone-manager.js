@@ -197,12 +197,14 @@ class PhoneManager {
         return;
       }
 
-      // Dung ws-scrcpy ADB, emulator tu detect qua port le
-      const scrcpyAdb = `docker exec ws-scrcpy adb`;
+      // Restart ws-scrcpy de ADB scan lai tat ca emulator ports
       await runCmd(`adb kill-server 2>/dev/null`);
+      await runCmd(`docker restart ws-scrcpy`);
+      await new Promise(r => setTimeout(r, 5000));
+      const scrcpyAdb = `docker exec ws-scrcpy adb`;
       const emulatorId = `emulator-${phone.port - 1}`;
-      // Cho ws-scrcpy detect emulator
       await runCmd(`${scrcpyAdb} devices`);
+      await new Promise(r => setTimeout(r, 2000));
       const { stdout } = await runCmd(`${scrcpyAdb} -s ${emulatorId} shell getprop sys.boot_completed`);
 
       if (stdout === '1') {
