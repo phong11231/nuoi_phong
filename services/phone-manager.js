@@ -196,19 +196,19 @@ class PhoneManager {
         return;
       }
 
-      await runCmd(`adb connect localhost:${phone.port}`);
-      const { stdout } = await runCmd(`adb -s localhost:${phone.port} shell getprop sys.boot_completed`);
+      // Dung ws-scrcpy ADB de tranh xung dot version voi host ADB
+      const scrcpyAdb = `docker exec ws-scrcpy adb`;
+      await runCmd(`adb kill-server 2>/dev/null`);
+      await runCmd(`${scrcpyAdb} connect localhost:${phone.port}`);
+      const { stdout } = await runCmd(`${scrcpyAdb} -s localhost:${phone.port} shell getprop sys.boot_completed`);
 
       if (stdout === '1') {
         console.log(`${phone.name}: Android da boot xong`);
-        const adb = `adb -s localhost:${phone.port}`;
+        const adb = `${scrcpyAdb} -s localhost:${phone.port}`;
         await runCmd(`${adb} shell svc power stayon true`);
         await runCmd(`${adb} shell settings put system screen_off_timeout 2147483647`);
         await runCmd(`${adb} shell input keyevent 26`);
         console.log(`${phone.name}: Da bat man hinh mac dinh`);
-
-        // Ket noi ws-scrcpy de stream man hinh
-        await runCmd(`docker exec ws-scrcpy adb connect localhost:${phone.port}`);
         console.log(`${phone.name}: Da ket noi ws-scrcpy`);
 
         const dev = phone.device;
