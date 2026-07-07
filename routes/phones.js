@@ -47,4 +47,10 @@ router.put('/:id/proxy', async (req, res) => {
   res.json(phone);
 });
 
+router.delete('/:id/proxy', async (req, res) => {
+  const phone = await phoneManager.removeProxy(req.params.id);
+  if (!phone) return res.status(404).json({ error: 'Khong tim thay phone' });
+  res.json(phone);
+});
+
 module.exports = router;

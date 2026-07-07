@@ -342,7 +342,6 @@ class PhoneManager {
 
     if (phone.status !== 'running') return phone;
 
-    // Parse proxy: host:port:user:pass
     const parts = proxyStr.split(':');
     const proxyHost = parts[0];
     const proxyPort = parts[1];
@@ -350,19 +349,12 @@ class PhoneManager {
     const proxyPass = parts[3] || '';
 
     if (proxyUser) {
-      // Proxy co auth -> tao relay khong auth tren VPS
       const relayPort = 20000 + phone.port;
       await this._startProxyRelay(phone, relayPort, proxyHost, proxyPort, proxyUser, proxyPass);
-      // Set Android proxy toi relay (Docker gateway)
-      const adb = `adb -s localhost:${phone.port}`;
-      await runCmd(`${adb} shell settings put global http_proxy 10.0.2.2:${relayPort}`);
-      // Thu gateway khac neu 10.0.2.2 khong hoat dong
-      await runCmd(`${adb} shell settings put global http_proxy 172.17.0.1:${relayPort}`);
+      await runCmd(`docker exec ${phone.containerName} settings put global http_proxy 172.17.0.1:${relayPort}`);
       phone.relayPort = relayPort;
     } else {
-      // Proxy khong auth -> set truc tiep
-      const adb = `adb -s localhost:${phone.port}`;
-      await runCmd(`${adb} shell settings put global http_proxy ${proxyHost}:${proxyPort}`);
+      await runCmd(`docker exec ${phone.containerName} settings put global http_proxy ${proxyHost}:${proxyPort}`);
     }
 
     this._saveData();
@@ -371,18 +363,45 @@ class PhoneManager {
   }
 
   async _startProxyRelay(phone, relayPort, targetHost, targetPort, user, pass) {
-    // Dung socat hoac node proxy relay
-    // Kill relay cu neu co
-    await runCmd(`fuser -k ${relayPort}/tcp 2>/dev/null`);
+    if (!this._relays) this._relays = {};
+    if (this._relays[phone.id]) {
+      try { this._relays[phone.id].close(); } catch (e) {}
+    }
 
     const http = require('http');
     const net = require('net');
     const authHeader = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
 
-    const server = net.createServer((clientSocket) => {
+    const server = http.createServer((req, res) => {
+      const upstream = http.request({
+        host: targetHost,
+        port: parseInt(targetPort),
+        method: req.method,
+        path: req.url,
+        headers: { ...req.headers, 'Proxy-Authorization': authHeader },
+      }, (upRes) => {
+        res.writeHead(upRes.statusCode, upRes.headers);
+        upRes.pipe(res);
+      });
+      upstream.on('error', () => res.destroy());
+      req.pipe(upstream);
+    });
+
+    server.on('connect', (req, clientSocket, head) => {
       const proxySocket = net.createConnection(parseInt(targetPort), targetHost, () => {
-        clientSocket.pipe(proxySocket);
-        proxySocket.pipe(clientSocket);
+        proxySocket.write(`CONNECT ${req.url} HTTP/1.1\r\nHost: ${req.url}\r\nProxy-Authorization: ${authHeader}\r\n\r\n`);
+      });
+      proxySocket.once('data', (chunk) => {
+        if (chunk.toString().includes('200')) {
+          clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+          if (head && head.length) proxySocket.write(head);
+          proxySocket.pipe(clientSocket);
+          clientSocket.pipe(proxySocket);
+        } else {
+          clientSocket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
+          clientSocket.destroy();
+          proxySocket.destroy();
+        }
       });
       proxySocket.on('error', () => clientSocket.destroy());
       clientSocket.on('error', () => proxySocket.destroy());
@@ -395,10 +414,6 @@ class PhoneManager {
       console.error(`Loi proxy relay ${phone.name}:`, err.message);
     });
 
-    if (!this._relays) this._relays = {};
-    if (this._relays[phone.id]) {
-      try { this._relays[phone.id].close(); } catch (e) {}
-    }
     this._relays[phone.id] = server;
   }
 
@@ -406,8 +421,9 @@ class PhoneManager {
     const phone = this.phones.get(id);
     if (!phone) return null;
 
-    const adb = `adb -s localhost:${phone.port}`;
-    await runCmd(`${adb} shell settings put global http_proxy :0`);
+    if (phone.status === 'running') {
+      await runCmd(`docker exec ${phone.containerName} settings put global http_proxy :0`);
+    }
 
     if (this._relays && this._relays[id]) {
       try { this._relays[id].close(); } catch (e) {}
