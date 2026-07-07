@@ -40,24 +40,75 @@ const PHONE_MODELS = [
   { brand: 'realme', model: 'RMX3624', name: 'C55', device: 'RE879BL1', board: 'mt6785', hardware: 'mt6785', screen: '1080x2400', android: '13', fingerprint: 'realme/RMX3624/RE879BL1:13/TP1A.220905.001/R.1234567:user/release-keys' },
 ];
 
-function randomMAC() {
+const BRAND_MAC_OUI = {
+  'samsung': ['A8:7D:12', 'C0:BD:D1', '00:26:37', '78:52:1A', 'D0:22:BE', '34:23:BA', 'F4:7B:5E'],
+  'Xiaomi':  ['28:6C:07', '64:CC:2E', '9C:99:A0', '74:23:44', 'AC:C1:EE', '50:64:2B'],
+  'OPPO':    ['A4:3B:FA', 'CC:2D:83', '98:F1:99', '2C:5B:E1'],
+  'vivo':    ['BC:E7:96', 'D4:6A:6A', '44:A4:2D', '80:A5:02'],
+  'realme':  ['A4:3B:FA', 'CC:2D:83', '98:F1:99'],
+};
+
+const BRAND_TAC = {
+  'samsung': ['35332510', '35290911', '35397010', '35476809', '35836209', '35188710'],
+  'Xiaomi':  ['86388003', '86513603', '86461103', '86726903'],
+  'OPPO':    ['86776303', '86984804', '86912104'],
+  'vivo':    ['86328604', '86471404', '86739004'],
+  'realme':  ['86776303', '86912104', '86984804'],
+};
+
+function randomMAC(brand) {
+  const ouis = BRAND_MAC_OUI[brand] || BRAND_MAC_OUI['samsung'];
+  const oui = ouis[Math.floor(Math.random() * ouis.length)];
   const hex = '0123456789ABCDEF';
-  let mac = '02';
-  for (let i = 0; i < 5; i++) {
-    mac += ':' + hex[Math.floor(Math.random() * 16)] + hex[Math.floor(Math.random() * 16)];
+  let suffix = '';
+  for (let i = 0; i < 3; i++) {
+    suffix += ':' + hex[Math.floor(Math.random() * 16)] + hex[Math.floor(Math.random() * 16)];
   }
-  return mac;
+  return oui + suffix;
 }
 
-function randomIMEI() {
-  let imei = '';
-  for (let i = 0; i < 15; i++) {
-    imei += Math.floor(Math.random() * 10);
+function luhnCheckDigit(digits) {
+  let sum = 0;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let d = parseInt(digits[i]);
+    if ((digits.length - i) % 2 === 1) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
   }
-  return imei;
+  return (10 - (sum % 10)) % 10;
+}
+
+function randomIMEI(brand) {
+  const tacs = BRAND_TAC[brand] || BRAND_TAC['samsung'];
+  const tac = tacs[Math.floor(Math.random() * tacs.length)];
+  let body = tac;
+  for (let i = 0; i < 6; i++) {
+    body += Math.floor(Math.random() * 10);
+  }
+  return body + luhnCheckDigit(body);
+}
+
+function randomSerial(brand) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let prefix = brand === 'samsung' ? 'R5' : brand === 'Xiaomi' ? 'X0' : 'SN';
+  for (let i = 0; i < 9; i++) {
+    prefix += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return prefix;
 }
 
 function randomAndroidId() {
+  const hex = '0123456789abcdef';
+  let id = '';
+  for (let i = 0; i < 16; i++) {
+    id += hex[Math.floor(Math.random() * 16)];
+  }
+  return id;
+}
+
+function randomGSFId() {
   const hex = '0123456789abcdef';
   let id = '';
   for (let i = 0; i < 16; i++) {
@@ -133,9 +184,11 @@ class PhoneManager {
         fingerprint: deviceConfig.fingerprint,
         screen: deviceConfig.screen,
         android: deviceConfig.android,
-        imei: randomIMEI(),
-        mac: randomMAC(),
+        imei: randomIMEI(deviceConfig.brand),
+        mac: randomMAC(deviceConfig.brand),
         androidId: randomAndroidId(),
+        serial: randomSerial(deviceConfig.brand),
+        gsfId: randomGSFId(),
       },
       proxy: null,
       zaloInstalled: false,
@@ -217,15 +270,42 @@ class PhoneManager {
         console.log(`${phone.name}: Da ket noi ws-scrcpy`);
 
         const dev = phone.device;
-        await runCmd(`${adb} shell setprop ro.kernel.qemu 0`);
-        await runCmd(`${adb} shell setprop ro.boot.qemu 0`);
-        await runCmd(`${adb} shell setprop ro.hardware ${dev.hardware}`);
-        await runCmd(`${adb} shell setprop ro.product.model ${dev.model}`);
-        await runCmd(`${adb} shell setprop ro.product.brand ${dev.brand}`);
-        await runCmd(`${adb} shell setprop ro.product.manufacturer ${dev.brand}`);
-        await runCmd(`${adb} shell setprop ro.product.device ${dev.device}`);
-        await runCmd(`${adb} shell setprop ro.build.fingerprint "${dev.fingerprint}"`);
-        await runCmd(`${adb} shell settings put secure android_id ${dev.androidId}`);
+        const c = phone.containerName;
+        const props = [
+          `ro.product.model=${dev.model}`,
+          `ro.product.brand=${dev.brand}`,
+          `ro.product.manufacturer=${dev.brand}`,
+          `ro.product.device=${dev.device}`,
+          `ro.product.board=${dev.board}`,
+          `ro.product.name=${dev.device}`,
+          `ro.hardware=${dev.hardware}`,
+          `ro.build.fingerprint=${dev.fingerprint}`,
+          `ro.build.display.id=${dev.fingerprint.split('/').pop() || 'OPR1.170623.027'}`,
+          `ro.serialno=${dev.serial}`,
+          `ro.boot.serialno=${dev.serial}`,
+          `ro.kernel.qemu=0`,
+          `ro.boot.qemu=0`,
+          `ro.boot.hardware=${dev.hardware}`,
+          `ro.hardware.chipname=${dev.hardware}`,
+          `ro.build.product=${dev.device}`,
+          `persist.sys.timezone=Asia/Ho_Chi_Minh`,
+          `gsm.operator.alpha=Viettel`,
+          `gsm.operator.numeric=45204`,
+          `gsm.operator.iso-country=vn`,
+          `gsm.sim.operator.alpha=Viettel`,
+          `gsm.sim.operator.numeric=45204`,
+          `gsm.sim.operator.iso-country=vn`,
+          `gsm.sim.state=READY`,
+          `ro.telephony.default_network=13`,
+        ];
+        const sedCmd = props.map(p => {
+          const [key] = p.split('=');
+          return `-e '/^${key}=/d'`;
+        }).join(' ');
+        const appendCmd = props.map(p => `echo '${p}' >> /system/build.prop`).join(' && ');
+        await runCmd(`docker exec ${c} sh -c "mount -o remount,rw /system 2>/dev/null; sed -i ${sedCmd} /system/build.prop && ${appendCmd}"`);
+        await runCmd(`docker exec ${c} settings put secure android_id ${dev.androidId}`);
+        await runCmd(`docker exec ${c} setprop net.hostname android-${dev.androidId.substring(0,8)}`);
         console.log(`${phone.name}: Da spoof device info: ${dev.brand} ${dev.model}`);
 
         const ZALO_SPLIT_DIR = '/root/zalo_split';
@@ -366,15 +446,15 @@ class PhoneManager {
 
   async _hardenProxy(phone) {
     const c = phone.containerName;
-    // DNS: dung Google DNS thay vi DNS VPS (chong DNS leak)
     await runCmd(`docker exec ${c} setprop net.dns1 8.8.8.8`);
     await runCmd(`docker exec ${c} setprop net.dns2 8.8.4.4`);
-    // Timezone Vietnam
     await runCmd(`docker exec ${c} setprop persist.sys.timezone Asia/Ho_Chi_Minh`);
-    // Tat IPv6 chong leak
     await runCmd(`docker exec ${c} sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null`);
     await runCmd(`docker exec ${c} sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null`);
-    console.log(`${phone.name}: Hardened proxy (DNS, timezone, IPv6)`);
+    // Force DNS qua iptables (chong app bypass)
+    await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null`);
+    await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null`);
+    console.log(`${phone.name}: Hardened proxy (DNS forced, timezone, IPv6 off)`);
   }
 
   async _startProxyRelay(phone, relayPort, targetHost, targetPort, user, pass) {
@@ -422,8 +502,8 @@ class PhoneManager {
       clientSocket.on('error', () => proxySocket.destroy());
     });
 
-    server.listen(relayPort, '0.0.0.0', () => {
-      console.log(`Proxy relay cho ${phone.name} tren port ${relayPort}`);
+    server.listen(relayPort, '172.17.0.1', () => {
+      console.log(`Proxy relay cho ${phone.name} tren port ${relayPort} (chi Docker)`);
     });
     server.on('error', (err) => {
       console.error(`Loi proxy relay ${phone.name}:`, err.message);
