@@ -357,9 +357,24 @@ class PhoneManager {
       await runCmd(`docker exec ${phone.containerName} settings put global http_proxy ${proxyHost}:${proxyPort}`);
     }
 
+    await this._hardenProxy(phone);
+
     this._saveData();
-    console.log(`${phone.name}: Da set proxy ${proxyStr}`);
+    console.log(`${phone.name}: Da set proxy ${proxyStr} (hardened)`);
     return phone;
+  }
+
+  async _hardenProxy(phone) {
+    const c = phone.containerName;
+    // DNS: dung Google DNS thay vi DNS VPS (chong DNS leak)
+    await runCmd(`docker exec ${c} setprop net.dns1 8.8.8.8`);
+    await runCmd(`docker exec ${c} setprop net.dns2 8.8.4.4`);
+    // Timezone Vietnam
+    await runCmd(`docker exec ${c} setprop persist.sys.timezone Asia/Ho_Chi_Minh`);
+    // Tat IPv6 chong leak
+    await runCmd(`docker exec ${c} sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null`);
+    await runCmd(`docker exec ${c} sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null`);
+    console.log(`${phone.name}: Hardened proxy (DNS, timezone, IPv6)`);
   }
 
   async _startProxyRelay(phone, relayPort, targetHost, targetPort, user, pass) {
