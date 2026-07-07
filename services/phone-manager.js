@@ -195,6 +195,10 @@ class PhoneManager {
 
       if (stdout === '1') {
         console.log(`${phone.name}: Android da boot xong`);
+        await runCmd(`adb -s localhost:${phone.port} shell svc power stayon true`);
+        await runCmd(`adb -s localhost:${phone.port} shell settings put system screen_off_timeout 2147483647`);
+        await runCmd(`adb -s localhost:${phone.port} shell input keyevent 26`);
+        console.log(`${phone.name}: Da bat man hinh mac dinh`);
         if (fs.existsSync(ZALO_APK)) {
           console.log(`${phone.name}: Dang cai Zalo...`);
           const { err } = await runCmd(`adb -s localhost:${phone.port} install -r ${ZALO_APK}`);
