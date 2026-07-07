@@ -605,10 +605,10 @@
     // === OPEN PHONE ===
     function openPhone(port, name) {
       const host = window.location.hostname;
-      // Port 5555 -> emulator-5554 (auto-detect), port khac -> localhost:port
-      var udid = (port === 5555) ? 'emulator-5554' : 'localhost:' + port;
+      // Port le (5555,5557,5559) -> emulator-(port-1) (5554,5556,5558)
+      var udid = 'emulator-' + (port - 1);
       var wsParam = encodeURIComponent('ws://' + host + ':8000/?action=proxy-adb&remote=tcp%3A8886&udid=' + udid);
-      var url = 'http://' + host + ':8000/#!action=stream&udid=' + encodeURIComponent(udid) + '&player=broadway&ws=' + wsParam;
+      var url = 'http://' + host + ':8000/#!action=stream&udid=' + udid + '&player=broadway&ws=' + wsParam;
       document.getElementById('viewerTitle').textContent = name || 'Phone';
       document.getElementById('viewerFrame').src = url;
       document.getElementById('viewerModal').classList.add('active');

@@ -102,9 +102,10 @@ class PhoneManager {
   }
 
   _getNextPort() {
+    // Dung port le (5555, 5557, 5559...) de ADB auto-detect la emulator
     const usedPorts = new Set(Array.from(this.phones.values()).map(p => p.port));
     let port = BASE_PORT;
-    while (usedPorts.has(port)) port++;
+    while (usedPorts.has(port)) port += 2;
     return port;
   }
 
@@ -196,15 +197,17 @@ class PhoneManager {
         return;
       }
 
-      // Dung ws-scrcpy ADB de tranh xung dot version voi host ADB
+      // Dung ws-scrcpy ADB, emulator tu detect qua port le
       const scrcpyAdb = `docker exec ws-scrcpy adb`;
       await runCmd(`adb kill-server 2>/dev/null`);
-      await runCmd(`${scrcpyAdb} connect localhost:${phone.port}`);
-      const { stdout } = await runCmd(`${scrcpyAdb} -s localhost:${phone.port} shell getprop sys.boot_completed`);
+      const emulatorId = `emulator-${phone.port - 1}`;
+      // Cho ws-scrcpy detect emulator
+      await runCmd(`${scrcpyAdb} devices`);
+      const { stdout } = await runCmd(`${scrcpyAdb} -s ${emulatorId} shell getprop sys.boot_completed`);
 
       if (stdout === '1') {
         console.log(`${phone.name}: Android da boot xong`);
-        const adb = `${scrcpyAdb} -s localhost:${phone.port}`;
+        const adb = `${scrcpyAdb} -s ${emulatorId}`;
         await runCmd(`${adb} shell svc power stayon true`);
         await runCmd(`${adb} shell settings put system screen_off_timeout 2147483647`);
         await runCmd(`${adb} shell input keyevent 26`);
