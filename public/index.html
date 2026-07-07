@@ -448,24 +448,8 @@
       <h3>Cau hinh Proxy</h3>
       <input type="hidden" id="proxyPhoneId">
       <div class="form-group">
-        <label>Loai</label>
-        <input type="text" id="proxyType" value="socks5" placeholder="socks5 / http">
-      </div>
-      <div class="form-group">
-        <label>Host</label>
-        <input type="text" id="proxyHost" placeholder="103.xxx.xxx.xxx">
-      </div>
-      <div class="form-group">
-        <label>Port</label>
-        <input type="text" id="proxyPort" placeholder="1080">
-      </div>
-      <div class="form-group">
-        <label>Username (neu co)</label>
-        <input type="text" id="proxyUser" placeholder="">
-      </div>
-      <div class="form-group">
-        <label>Password (neu co)</label>
-        <input type="password" id="proxyPass" placeholder="">
+        <label>Proxy (host:port:user:pass)</label>
+        <input type="text" id="proxyInput" placeholder="103.179.189.46:19940:user:pass">
       </div>
       <div class="modal-actions">
         <button class="btn btn-outline btn-sm" onclick="closeProxyModal()">Huy</button>
@@ -648,18 +632,13 @@
 
     async function saveProxy() {
       const id = document.getElementById('proxyPhoneId').value;
-      const proxy = {
-        type: document.getElementById('proxyType').value,
-        host: document.getElementById('proxyHost').value,
-        port: document.getElementById('proxyPort').value,
-        username: document.getElementById('proxyUser').value,
-        password: document.getElementById('proxyPass').value,
-      };
+      const proxy = document.getElementById('proxyInput').value.trim();
+      if (!proxy) return alert('Nhap proxy');
 
       await fetch(API + '/api/phones/' + id + '/proxy', {
         method: 'PUT',
         headers: headers(),
-        body: JSON.stringify(proxy),
+        body: JSON.stringify({ proxy }),
       });
 
       closeProxyModal();

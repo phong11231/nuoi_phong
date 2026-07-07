@@ -325,10 +325,88 @@ class PhoneManager {
     return true;
   }
 
-  setProxy(id, proxy) {
+  async setProxy(id, proxyStr) {
     const phone = this.phones.get(id);
     if (!phone) return null;
-    phone.proxy = proxy;
+    phone.proxy = proxyStr;
+    this._saveData();
+
+    if (phone.status !== 'running') return phone;
+
+    // Parse proxy: host:port:user:pass
+    const parts = proxyStr.split(':');
+    const proxyHost = parts[0];
+    const proxyPort = parts[1];
+    const proxyUser = parts[2] || '';
+    const proxyPass = parts[3] || '';
+
+    if (proxyUser) {
+      // Proxy co auth -> tao relay khong auth tren VPS
+      const relayPort = 20000 + phone.port;
+      await this._startProxyRelay(phone, relayPort, proxyHost, proxyPort, proxyUser, proxyPass);
+      // Set Android proxy toi relay (Docker gateway)
+      const adb = `adb -s localhost:${phone.port}`;
+      await runCmd(`${adb} shell settings put global http_proxy 10.0.2.2:${relayPort}`);
+      // Thu gateway khac neu 10.0.2.2 khong hoat dong
+      await runCmd(`${adb} shell settings put global http_proxy 172.17.0.1:${relayPort}`);
+      phone.relayPort = relayPort;
+    } else {
+      // Proxy khong auth -> set truc tiep
+      const adb = `adb -s localhost:${phone.port}`;
+      await runCmd(`${adb} shell settings put global http_proxy ${proxyHost}:${proxyPort}`);
+    }
+
+    this._saveData();
+    console.log(`${phone.name}: Da set proxy ${proxyStr}`);
+    return phone;
+  }
+
+  async _startProxyRelay(phone, relayPort, targetHost, targetPort, user, pass) {
+    // Dung socat hoac node proxy relay
+    // Kill relay cu neu co
+    await runCmd(`fuser -k ${relayPort}/tcp 2>/dev/null`);
+
+    const http = require('http');
+    const net = require('net');
+    const authHeader = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
+
+    const server = net.createServer((clientSocket) => {
+      const proxySocket = net.createConnection(parseInt(targetPort), targetHost, () => {
+        clientSocket.pipe(proxySocket);
+        proxySocket.pipe(clientSocket);
+      });
+      proxySocket.on('error', () => clientSocket.destroy());
+      clientSocket.on('error', () => proxySocket.destroy());
+    });
+
+    server.listen(relayPort, '0.0.0.0', () => {
+      console.log(`Proxy relay cho ${phone.name} tren port ${relayPort}`);
+    });
+    server.on('error', (err) => {
+      console.error(`Loi proxy relay ${phone.name}:`, err.message);
+    });
+
+    if (!this._relays) this._relays = {};
+    if (this._relays[phone.id]) {
+      try { this._relays[phone.id].close(); } catch (e) {}
+    }
+    this._relays[phone.id] = server;
+  }
+
+  async removeProxy(id) {
+    const phone = this.phones.get(id);
+    if (!phone) return null;
+
+    const adb = `adb -s localhost:${phone.port}`;
+    await runCmd(`${adb} shell settings put global http_proxy :0`);
+
+    if (this._relays && this._relays[id]) {
+      try { this._relays[id].close(); } catch (e) {}
+      delete this._relays[id];
+    }
+
+    phone.proxy = null;
+    phone.relayPort = null;
     this._saveData();
     return phone;
   }

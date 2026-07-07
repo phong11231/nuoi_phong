@@ -39,10 +39,10 @@ router.delete('/:id', async (req, res) => {
   res.json({ success: true });
 });
 
-router.put('/:id/proxy', (req, res) => {
-  const { host, port, username, password, type } = req.body;
-  const proxy = { host, port, username, password, type: type || 'socks5' };
-  const phone = phoneManager.setProxy(req.params.id, proxy);
+router.put('/:id/proxy', async (req, res) => {
+  const { proxy } = req.body;
+  if (!proxy) return res.status(400).json({ error: 'Thieu proxy' });
+  const phone = await phoneManager.setProxy(req.params.id, proxy);
   if (!phone) return res.status(404).json({ error: 'Khong tim thay phone' });
   res.json(phone);
 });
