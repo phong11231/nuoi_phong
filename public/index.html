@@ -621,7 +621,8 @@
     // === OPEN PHONE ===
     function openPhone(port, name) {
       const host = window.location.hostname;
-      const url = 'http://' + host + ':8000';
+      const udid = 'localhost:' + port;
+      const url = 'http://' + host + ':8000/#!action=stream&udid=' + encodeURIComponent(udid) + '&player=broadway&ws=ws://' + host + ':8000';
       document.getElementById('viewerTitle').textContent = name || 'Phone';
       document.getElementById('viewerFrame').src = url;
       document.getElementById('viewerModal').classList.add('active');
