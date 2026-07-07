@@ -33,8 +33,8 @@ router.post('/:id/stop', async (req, res) => {
   res.json(phone);
 });
 
-router.delete('/:id', (req, res) => {
-  const ok = phoneManager.deletePhone(req.params.id);
+router.delete('/:id', async (req, res) => {
+  const ok = await phoneManager.deletePhone(req.params.id);
   if (!ok) return res.status(404).json({ error: 'Khong tim thay phone' });
   res.json({ success: true });
 });
