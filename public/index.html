@@ -431,6 +431,17 @@
     </div>
   </div>
 
+  <!-- PHONE VIEWER MODAL -->
+  <div class="modal-overlay" id="viewerModal" style="z-index:200">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);width:95%;max-width:420px;height:90vh;display:flex;flex-direction:column;position:relative;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+        <h3 id="viewerTitle" style="font-size:15px;margin:0;">Phone</h3>
+        <button class="btn btn-red btn-sm" onclick="closeViewer()">Dong</button>
+      </div>
+      <iframe id="viewerFrame" style="flex:1;border:none;background:#000;border-radius:0 0 var(--radius) var(--radius);" allow="autoplay"></iframe>
+    </div>
+  </div>
+
   <!-- PROXY MODAL -->
   <div class="modal-overlay" id="proxyModal">
     <div class="modal">
@@ -556,7 +567,7 @@
           ${p.zaloInstalled ? '<div class="phone-info" style="color:var(--green)">Zalo: Da cai</div>' : ''}
           ${p.proxy ? `<div class="phone-proxy">${p.proxy.type}://<span>${p.proxy.host}:${p.proxy.port}</span></div>` : '<div class="phone-proxy">Chua co proxy</div>'}
           <div class="phone-actions">
-            ${p.status === 'running' ? `<button class="btn btn-blue btn-sm" onclick="openPhone(${p.port})">Mo</button>` : ''}
+            ${p.status === 'running' ? `<button class="btn btn-blue btn-sm" onclick="openPhone(${p.port}, '${p.name.replace(/'/g, "\\'")}')">Mo</button>` : ''}
             ${p.status === 'stopped'
               ? `<button class="btn btn-green btn-sm" onclick="startPhone('${p.id}')">Bat</button>`
               : p.status === 'running' ? `<button class="btn btn-red btn-sm" onclick="stopPhone('${p.id}')">Tat</button>` : ''
@@ -608,12 +619,19 @@
     }
 
     // === OPEN PHONE ===
-    function openPhone(port) {
+    function openPhone(port, name) {
       const host = window.location.hostname;
       const udid = 'localhost:' + port;
       const wsParam = 'ws://' + host + ':8000/?action=proxy-adb&remote=tcp%3A8886&udid=' + encodeURIComponent(udid);
       const url = 'http://' + host + ':8000/#!action=stream&udid=' + encodeURIComponent(udid) + '&player=tinyh264&ws=' + encodeURIComponent(wsParam);
-      window.open(url, 'phone_' + port);
+      document.getElementById('viewerTitle').textContent = name || 'Phone';
+      document.getElementById('viewerFrame').src = url;
+      document.getElementById('viewerModal').classList.add('active');
+    }
+
+    function closeViewer() {
+      document.getElementById('viewerModal').classList.remove('active');
+      document.getElementById('viewerFrame').src = '';
     }
 
     // === PROXY ===
