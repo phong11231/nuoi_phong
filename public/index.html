@@ -549,7 +549,8 @@
           <div class="phone-info">IMEI: <span>${p.device.imei}</span></div>
           <div class="phone-info">Port: <span>${p.port || '-'}</span></div>
           ${p.zaloInstalled ? '<div class="phone-info" style="color:var(--green)">Zalo: Da cai</div>' : ''}
-          ${p.proxy ? `<div class="phone-proxy">${p.proxy.type}://<span>${p.proxy.host}:${p.proxy.port}</span></div>` : '<div class="phone-proxy">Chua co proxy</div>'}
+          ${p.proxy ? `<div class="phone-proxy">Proxy: <span>${p.proxy.split(':').slice(0,2).join(':')}</span></div>` : '<div class="phone-proxy">Chua co proxy</div>'}
+          <div id="proxyResult-${p.id}" style="font-size:12px;margin:4px 0;color:var(--green);display:none;"></div>
           <div class="phone-actions">
             ${p.status === 'running' ? `<button class="btn btn-blue btn-sm" onclick="openPhone(${p.port}, '${p.name.replace(/'/g, "\\'")}')">Mo</button>` : ''}
             ${p.status === 'stopped'
@@ -557,6 +558,7 @@
               : p.status === 'running' ? `<button class="btn btn-red btn-sm" onclick="stopPhone('${p.id}')">Tat</button>` : ''
             }
             <button class="btn btn-outline btn-sm" onclick="openProxyModal('${p.id}')">Proxy</button>
+            ${p.status === 'running' ? `<button class="btn btn-outline btn-sm" onclick="checkProxy('${p.id}')">Check IP</button>` : ''}
             <button class="btn btn-red btn-sm" onclick="deletePhone('${p.id}')">Xoa</button>
           </div>
         </div>
@@ -642,6 +644,27 @@
 
       closeProxyModal();
       loadPhones();
+    }
+
+    async function checkProxy(id) {
+      const el = document.getElementById('proxyResult-' + id);
+      el.style.display = 'block';
+      el.style.color = 'var(--orange)';
+      el.textContent = 'Dang kiem tra...';
+      try {
+        const res = await fetch(API + '/api/phones/' + id + '/check-proxy', { headers: headers() });
+        const data = await res.json();
+        if (data.ip) {
+          el.style.color = 'var(--green)';
+          el.textContent = 'IP: ' + data.ip;
+        } else {
+          el.style.color = 'var(--red)';
+          el.textContent = 'Loi: ' + (data.error || 'Khong kiem tra duoc');
+        }
+      } catch (e) {
+        el.style.color = 'var(--red)';
+        el.textContent = 'Loi ket noi server';
+      }
     }
 
     // === SCHEDULE ===

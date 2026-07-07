@@ -47,6 +47,21 @@ router.put('/:id/proxy', async (req, res) => {
   res.json(phone);
 });
 
+router.get('/:id/check-proxy', async (req, res) => {
+  const phone = phoneManager.getPhone(req.params.id);
+  if (!phone) return res.status(404).json({ error: 'Khong tim thay phone' });
+  if (phone.status !== 'running') return res.status(400).json({ error: 'Phone chua chay' });
+
+  const { exec } = require('child_process');
+  const containerName = phone.containerName;
+  exec(`docker exec ${containerName} wget -qO- --timeout=10 http://api.ipify.org`, { timeout: 15000 }, (err, stdout) => {
+    if (err) {
+      return res.json({ error: 'Khong kiem tra duoc IP' });
+    }
+    res.json({ ip: stdout.trim() });
+  });
+});
+
 router.delete('/:id/proxy', async (req, res) => {
   const phone = await phoneManager.removeProxy(req.params.id);
   if (!phone) return res.status(404).json({ error: 'Khong tim thay phone' });
