@@ -53,8 +53,20 @@ router.get('/:id/check-proxy', async (req, res) => {
   if (phone.status !== 'running') return res.status(400).json({ error: 'Phone chua chay' });
 
   const { exec } = require('child_process');
-  const containerName = phone.containerName;
-  exec(`docker exec ${containerName} wget -qO- --timeout=10 http://api.ipify.org`, { timeout: 15000 }, (err, stdout) => {
+  let cmd;
+  if (phone.proxy) {
+    const parts = phone.proxy.split(':');
+    const host = parts[0], port = parts[1], user = parts[2], pass = parts[3];
+    if (user && pass) {
+      cmd = `curl -s --max-time 10 -x http://${user}:${pass}@${host}:${port} http://api.ipify.org`;
+    } else {
+      cmd = `curl -s --max-time 10 -x http://${host}:${port} http://api.ipify.org`;
+    }
+  } else {
+    cmd = `curl -s --max-time 10 http://api.ipify.org`;
+  }
+
+  exec(cmd, { timeout: 15000 }, (err, stdout) => {
     if (err) {
       return res.json({ error: 'Khong kiem tra duoc IP' });
     }
