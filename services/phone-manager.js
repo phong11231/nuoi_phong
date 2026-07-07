@@ -155,31 +155,11 @@ class PhoneManager {
 
   async _createContainer(phone) {
     try {
-      const dev = phone.device;
       const container = await docker.createContainer({
         Image: REDROID_IMAGE,
         name: phone.containerName,
         ExposedPorts: { '5555/tcp': {} },
-        Cmd: [
-          'androidboot.redroid_gpu_mode=guest',
-          `ro.product.model=${dev.model}`,
-          `ro.product.brand=${dev.brand}`,
-          `ro.product.manufacturer=${dev.brand}`,
-          `ro.product.device=${dev.device}`,
-          `ro.product.board=${dev.board}`,
-          `ro.hardware=${dev.hardware}`,
-          `ro.build.fingerprint=${dev.fingerprint}`,
-          `ro.build.display.id=${dev.fingerprint.split('/').pop().split(':')[0]}`,
-          `ro.product.name=${dev.device}`,
-          `ro.boot.hardware=${dev.hardware}`,
-          `ro.hardware.chipname=${dev.hardware}`,
-          'ro.kernel.qemu=0',
-          'ro.boot.qemu=0',
-          'ro.debuggable=0',
-          'ro.secure=1',
-          'ro.build.type=user',
-          'ro.build.tags=release-keys',
-        ],
+        Cmd: ['androidboot.redroid_gpu_mode=guest'],
         HostConfig: {
           Privileged: true,
           PortBindings: {
