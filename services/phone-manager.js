@@ -312,6 +312,7 @@ class PhoneManager {
           `ro.telephony.default_network=13`,
           `ro.debuggable=0`,
           `ro.secure=1`,
+          `ro.adb.secure=0`,
           `ro.build.type=user`,
           `ro.build.tags=release-keys`,
           `ro.build.description=${dev.device}-user 13 TP1A.220624.014 release-keys`,
