@@ -439,19 +439,17 @@ class PhoneManager {
   }
 
   async _connectWsScrcpy(phone) {
+    console.log(`${phone.name}: Dang ket noi ws-scrcpy...`);
     await runCmd(`adb kill-server 2>/dev/null`);
-    const { stdout: out1 } = await runCmd(`docker exec ws-scrcpy adb connect 172.17.0.1:${phone.port}`);
-    console.log(`${phone.name}: ws-scrcpy connect: ${out1}`);
-    if (out1.includes('cannot') || out1.includes('refused')) {
-      console.log(`${phone.name}: Connect that bai, restart ws-scrcpy...`);
-      await runCmd(`docker restart ws-scrcpy`);
-      await new Promise(r => setTimeout(r, 5000));
-      await runCmd(`adb kill-server 2>/dev/null`);
-      const allPhones = this.getAllPhones().filter(p => p.status === 'running');
-      for (const p of allPhones) {
-        await runCmd(`docker exec ws-scrcpy adb connect 172.17.0.1:${p.port}`);
-      }
+    await runCmd(`docker restart ws-scrcpy`);
+    await new Promise(r => setTimeout(r, 8000));
+    await runCmd(`adb kill-server 2>/dev/null`);
+    const allPhones = this.getAllPhones().filter(p => p.status === 'running' || p.status === 'booting');
+    for (const p of allPhones) {
+      const { stdout } = await runCmd(`docker exec ws-scrcpy adb connect 172.17.0.1:${p.port}`);
+      console.log(`  ws-scrcpy connect ${p.name} (${p.port}): ${stdout}`);
     }
+    await new Promise(r => setTimeout(r, 3000));
     const { stdout } = await runCmd(`docker exec ws-scrcpy adb devices`);
     console.log(`${phone.name}: ws-scrcpy devices: ${stdout.replace(/\n/g, ', ')}`);
   }
