@@ -183,6 +183,8 @@
     .phone-status.running { background: rgba(34,197,94,0.15); color: var(--green); }
     .phone-status.stopped { background: rgba(239,68,68,0.15); color: var(--red); }
     .phone-status.creating { background: rgba(245,158,11,0.15); color: var(--orange); }
+    .phone-status.booting { background: rgba(99,102,241,0.15); color: var(--primary); animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
     .phone-status.error { background: rgba(239,68,68,0.15); color: var(--red); }
 
     .phone-info { font-size: 13px; color: var(--text2); margin-bottom: 4px; }
@@ -647,7 +649,7 @@
         </div>`;
       }
       for (const p of phones) {
-        const statusText = p.status === 'running' ? 'Dang chay' : p.status === 'creating' ? 'Dang tao...' : p.status === 'error' ? 'Loi' : 'Da dung';
+        const statusText = p.status === 'running' ? 'Dang chay' : p.status === 'booting' ? 'Dang khoi dong...' : p.status === 'creating' ? 'Dang tao...' : p.status === 'error' ? 'Loi' : 'Da dung';
         const safeName = esc(p.name);
         html += `
         <div class="phone-card">

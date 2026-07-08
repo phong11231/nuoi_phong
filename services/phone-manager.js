@@ -384,7 +384,7 @@ class PhoneManager {
       try {
         const container = docker.getContainer(phone.containerId);
         await container.start();
-        phone.status = 'running';
+        phone.status = 'booting';
         phone.startedAt = new Date().toISOString();
         this._saveData();
         console.log(`${phone.name}: Da start container, doi boot...`);
@@ -407,11 +407,16 @@ class PhoneManager {
       attempt++;
       if (attempt > 24) {
         console.log(`${phone.name}: timeout doi boot (4 phut)`);
+        phone.status = 'error';
+        phone.error = 'Boot timeout';
+        this._saveData();
         return;
       }
       const { stdout } = await runCmd(`docker exec ${c} getprop sys.boot_completed`);
       if (stdout === '1') {
         console.log(`${phone.name}: Boot xong, mo man hinh`);
+        phone.status = 'running';
+        this._saveData();
         await runCmd(`docker exec ${c} svc power stayon true`);
         await runCmd(`docker exec ${c} settings put system screen_off_timeout 2147483647`);
         await runCmd(`docker exec ${c} input keyevent 82`);
