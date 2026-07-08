@@ -277,17 +277,11 @@ class PhoneManager {
         binds.push(`${ZALO_SPLIT_DIR}:/data/zalo:ro`);
       }
 
-      const dev = phone.device;
       const container = await docker.createContainer({
         Image: REDROID_IMAGE,
         name: phone.containerName,
         ExposedPorts: { '5555/tcp': {} },
-        Cmd: [
-          'androidboot.redroid_gpu_mode=guest',
-          `androidboot.hardware=${dev.hardware}`,
-          `androidboot.serialno=${dev.serial}`,
-          `androidboot.boot_devices=${dev.hardware}`,
-        ],
+        Cmd: ['androidboot.redroid_gpu_mode=guest'],
         HostConfig: {
           Privileged: true,
           PortBindings: {
