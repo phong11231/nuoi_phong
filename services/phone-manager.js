@@ -434,6 +434,11 @@ class PhoneManager {
       }
     }
 
+    if (this._relays && this._relays[id]) {
+      try { this._relays[id].close(); } catch (e) {}
+      delete this._relays[id];
+    }
+
     this.phones.delete(id);
     this._saveData();
     return true;

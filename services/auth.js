@@ -56,4 +56,14 @@ function authMiddleware(req, res, next) {
   next();
 }
 
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, session] of sessions) {
+    if (now - session.createdAt > SESSION_TTL) sessions.delete(token);
+  }
+  for (const [key, attempt] of loginAttempts) {
+    if (now - attempt.lastAttempt > LOCKOUT_MS) loginAttempts.delete(key);
+  }
+}, 60 * 60 * 1000);
+
 module.exports = { login, verifyToken, authMiddleware };
