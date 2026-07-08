@@ -755,7 +755,7 @@
       var udid = '172.17.0.1:' + port;
       var encodedUdid = encodeURIComponent(udid);
       var wsParam = encodeURIComponent('ws://' + host + ':8000/?action=proxy-adb&remote=tcp%3A8886&udid=' + encodedUdid);
-      var url = 'http://' + host + ':8000/#!action=stream&udid=' + encodedUdid + '&player=h264-converter&ws=' + wsParam;
+      var url = 'http://' + host + ':8000/#!action=stream&udid=' + encodedUdid + '&player=mse&ws=' + wsParam;
 
       var count = Object.keys(phoneWindows).length;
       var offsetX = 60 + (count % 5) * 30;
