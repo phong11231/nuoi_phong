@@ -435,9 +435,16 @@ class PhoneManager {
 
   async _connectWsScrcpy(phone) {
     await runCmd(`adb kill-server 2>/dev/null`);
-    await runCmd(`docker exec ws-scrcpy adb connect 172.17.0.1:${phone.port}`);
+    await runCmd(`docker restart ws-scrcpy`);
+    console.log(`${phone.name}: Da restart ws-scrcpy, doi 5s...`);
+    await new Promise(r => setTimeout(r, 5000));
+    await runCmd(`adb kill-server 2>/dev/null`);
+    const allPhones = this.getAllPhones().filter(p => p.status === 'running');
+    for (const p of allPhones) {
+      await runCmd(`docker exec ws-scrcpy adb connect 172.17.0.1:${p.port}`);
+    }
     const { stdout } = await runCmd(`docker exec ws-scrcpy adb devices`);
-    console.log(`${phone.name}: ws-scrcpy adb devices: ${stdout.replace(/\n/g, ', ')}`);
+    console.log(`${phone.name}: ws-scrcpy devices: ${stdout.replace(/\n/g, ', ')}`);
   }
 
   async launchZalo(id) {
