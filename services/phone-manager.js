@@ -297,6 +297,16 @@ class PhoneManager {
           `gsm.sim.operator.iso-country=vn`,
           `gsm.sim.state=READY`,
           `ro.telephony.default_network=13`,
+          `ro.debuggable=0`,
+          `ro.secure=1`,
+          `ro.build.type=user`,
+          `ro.build.tags=release-keys`,
+          `ro.build.description=${dev.device}-user 13 TP1A.220624.014 release-keys`,
+          `ro.boot.vbmeta.device_state=locked`,
+          `ro.boot.verifiedbootstate=green`,
+          `ro.boot.flash.locked=1`,
+          `ro.setupwizard.mode=OPTIONAL`,
+          `ro.com.google.gmsversion=13_202301`,
         ];
         const sedCmd = props.map(p => {
           const [key] = p.split('=');

@@ -10,7 +10,7 @@ const { ScheduleManager } = require('./services/schedule-manager');
 const app = express();
 const server = http.createServer(app);
 
-app.use(cors());
+app.use(cors({ origin: false }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
