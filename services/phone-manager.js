@@ -410,8 +410,6 @@ class PhoneManager {
         await runCmd(`docker exec ${c} sh -c "mount -o remount,rw /system 2>/dev/null; sed -i ${sedCmd} /system/build.prop && ${appendCmd}"`);
         await runCmd(`docker exec ${c} settings put secure android_id ${dev.androidId}`);
         await runCmd(`docker exec ${c} setprop net.hostname android-${dev.androidId.substring(0,8)}`);
-        // An dau vet emulator
-        await this._hideEmulatorTraces(phone);
         console.log(`${phone.name}: Da spoof device info: ${dev.brand} ${dev.model}`);
 
         // Cai Zalo bang docker exec + pm (khong can ADB)
@@ -441,9 +439,12 @@ class PhoneManager {
           }
         }
 
-        // Copy ADB key san cho lan restart sau
-        await this._authorizeAdbKey(phone);
-        await this._connectWsScrcpy(phone);
+        // Restart container de ro.* properties co hieu luc
+        console.log(`${phone.name}: Restart container de ap dung spoof...`);
+        const container2 = docker.getContainer(phone.containerId);
+        await container2.restart();
+        // Doi boot lan 2
+        await this._waitSecondBoot(phone);
 
       } else {
         setTimeout(check, 10000);
@@ -451,6 +452,42 @@ class PhoneManager {
     };
 
     setTimeout(check, 30000);
+  }
+
+  async _waitSecondBoot(phone) {
+    const c = phone.containerName;
+    console.log(`${phone.name}: Doi boot lan 2 (sau restart)...`);
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 5000));
+      const { stdout } = await runCmd(`docker exec ${c} getprop sys.boot_completed`);
+      if (stdout === '1') {
+        console.log(`${phone.name}: Boot lan 2 xong`);
+        // Bat man hinh
+        await runCmd(`docker exec ${c} svc power stayon true`);
+        await runCmd(`docker exec ${c} settings put system screen_off_timeout 2147483647`);
+        await runCmd(`docker exec ${c} input keyevent 82`);
+        // An dau vet emulator
+        await this._hideEmulatorTraces(phone);
+        // Verify spoof
+        const { stdout: abi } = await runCmd(`docker exec ${c} getprop ro.product.cpu.abi`);
+        const { stdout: hw } = await runCmd(`docker exec ${c} getprop ro.hardware`);
+        const { stdout: bt } = await runCmd(`docker exec ${c} getprop ro.build.type`);
+        const { stdout: dbg } = await runCmd(`docker exec ${c} getprop ro.debuggable`);
+        console.log(`${phone.name}: Spoof check - abi:${abi} hw:${hw} build:${bt} debug:${dbg}`);
+        // Copy ADB key + connect ws-scrcpy
+        await this._authorizeAdbKey(phone);
+        await this._connectWsScrcpy(phone);
+        // Zalo
+        setTimeout(async () => {
+          await this.launchZalo(phone.id);
+        }, 5000);
+        return;
+      }
+    }
+    console.log(`${phone.name}: Timeout boot lan 2`);
+    phone.status = 'error';
+    phone.error = 'Boot timeout (lan 2)';
+    this._saveData();
   }
 
   getPhone(id) {
