@@ -740,9 +740,10 @@
 
     function openPhone(port, name) {
       var host = window.location.hostname;
-      var udid = 'emulator-' + (port - 1);
-      var wsParam = encodeURIComponent('ws://' + host + ':8000/?action=proxy-adb&remote=tcp%3A8886&udid=' + udid);
-      var url = 'http://' + host + ':8000/#!action=stream&udid=' + udid + '&player=mse&ws=' + wsParam;
+      var udid = '172.17.0.1:' + port;
+      var uidEnc = encodeURIComponent(udid);
+      var wsParam = encodeURIComponent('ws://' + host + ':8000/?action=proxy-adb&remote=tcp%3A8886&udid=' + uidEnc);
+      var url = 'http://' + host + ':8000/#!action=stream&udid=' + uidEnc + '&player=mse&ws=' + wsParam;
       window.open(url, 'phone_' + port);
     }
 
