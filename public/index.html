@@ -347,6 +347,44 @@
     .taskbar-item:hover { border-color: var(--primary); }
     .taskbar-item.minimized { opacity: 0.6; }
     .taskbar-item.tb-active { border-color: var(--primary); background: var(--primary); color: #fff; }
+
+    /* ===== SYSTEM STATS BAR ===== */
+    .sys-bar {
+      display: flex;
+      gap: 16px;
+      padding: 0 24px 16px;
+      flex-wrap: wrap;
+    }
+    .sys-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      flex: 1;
+      min-width: 200px;
+    }
+    .sys-card .sys-label {
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 6px;
+    }
+    .sys-card .sys-value {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .ram-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: var(--surface2);
+      border-radius: 4px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .ram-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.5s;
+    }
   </style>
 </head>
 <body>
@@ -381,6 +419,22 @@
       <div class="stat-card"><div class="label">Tong phone</div><div class="value" id="statTotal">0</div></div>
       <div class="stat-card"><div class="label">Dang chay</div><div class="value green" id="statRunning">0</div></div>
       <div class="stat-card"><div class="label">Da dung</div><div class="value orange" id="statStopped">0</div></div>
+    </div>
+
+    <div class="sys-bar" id="sysBar">
+      <div class="sys-card">
+        <div class="sys-label">RAM</div>
+        <div class="sys-value" id="sysRam">--</div>
+        <div class="ram-bar-bg"><div class="ram-bar-fill" id="sysRamBar" style="width:0%;background:var(--green)"></div></div>
+      </div>
+      <div class="sys-card">
+        <div class="sys-label">CPU</div>
+        <div class="sys-value" id="sysCpu">--</div>
+      </div>
+      <div class="sys-card">
+        <div class="sys-label">Uptime</div>
+        <div class="sys-value" id="sysUptime">--</div>
+      </div>
     </div>
 
     <div class="schedule-panel">
@@ -525,6 +579,27 @@
         document.getElementById('statTotal').textContent = phones.length;
         document.getElementById('statRunning').textContent = phones.filter(p => p.status === 'running').length;
         document.getElementById('statStopped').textContent = phones.filter(p => p.status === 'stopped').length;
+      } catch (e) {}
+      loadSystemStats();
+    }
+
+    async function loadSystemStats() {
+      try {
+        const res = await fetch(API + '/api/system', { headers: headers() });
+        if (!res.ok) return;
+        const s = await res.json();
+        var pct = s.ram.percent;
+        var color = pct > 85 ? 'var(--red)' : pct > 65 ? 'var(--orange)' : 'var(--green)';
+        document.getElementById('sysRam').textContent = s.ram.used + ' / ' + s.ram.total + ' MB (' + pct + '%)';
+        var bar = document.getElementById('sysRamBar');
+        bar.style.width = pct + '%';
+        bar.style.background = color;
+        document.getElementById('sysCpu').textContent = s.cpu.cores + ' cores - Load: ' + s.cpu.load1m;
+        var sec = Math.floor(s.uptime);
+        var d = Math.floor(sec / 86400); sec %= 86400;
+        var h = Math.floor(sec / 3600); sec %= 3600;
+        var m = Math.floor(sec / 60);
+        document.getElementById('sysUptime').textContent = d + ' ngay ' + h + 'h ' + m + 'm';
       } catch (e) {}
     }
 

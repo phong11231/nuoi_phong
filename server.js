@@ -20,6 +20,22 @@ app.use('/api/phones', phoneRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/schedule', scheduleRoutes);
 
+const os = require('os');
+const { authMiddleware } = require('./services/auth');
+app.get('/api/system', authMiddleware, (req, res) => {
+  const totalMB = Math.round(os.totalmem() / 1024 / 1024);
+  const freeMB = Math.round(os.freemem() / 1024 / 1024);
+  const usedMB = totalMB - freeMB;
+  const cpus = os.cpus();
+  const loadAvg = os.loadavg();
+  const uptimeSec = os.uptime();
+  res.json({
+    ram: { total: totalMB, free: freeMB, used: usedMB, percent: Math.round(usedMB / totalMB * 100) },
+    cpu: { cores: cpus.length, model: cpus[0] ? cpus[0].model.trim() : '', load1m: loadAvg[0].toFixed(2) },
+    uptime: uptimeSec,
+  });
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
