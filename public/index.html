@@ -19,6 +19,7 @@
       --green: #22c55e;
       --red: #ef4444;
       --orange: #f59e0b;
+      --yellow: #eab308;
       --radius: 12px;
     }
 
@@ -121,6 +122,12 @@
 
     .btn-sm { padding: 6px 12px; font-size: 12px; }
 
+    .btn-blue { background: #3b82f6; color: #fff; }
+    .btn-blue:hover { opacity: 0.9; }
+
+    .btn-yellow { background: var(--yellow); color: #000; }
+    .btn-yellow:hover { opacity: 0.9; }
+
     .login-error {
       color: var(--red);
       font-size: 13px;
@@ -173,6 +180,28 @@
     .stat-card .value.green { color: var(--green); }
     .stat-card .value.orange { color: var(--orange); }
 
+    /* ===== BREADCRUMB ===== */
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 24px 0;
+      font-size: 14px;
+      flex-wrap: wrap;
+    }
+
+    .breadcrumb a {
+      color: var(--primary);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .breadcrumb a:hover { text-decoration: underline; }
+
+    .breadcrumb .sep { color: var(--text2); }
+
+    .breadcrumb .current { color: var(--text); font-weight: 600; }
+
     /* ===== TOOLBAR ===== */
     .toolbar {
       display: flex;
@@ -184,7 +213,7 @@
 
     .toolbar h2 { font-size: 16px; }
 
-    .toolbar-actions { display: flex; gap: 8px; }
+    .toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
     /* ===== PHONE GRID ===== */
     .phone-grid {
@@ -203,6 +232,50 @@
     }
 
     .phone-card:hover { border-color: var(--primary); }
+
+    /* ===== FOLDER CARD ===== */
+    .folder-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .folder-card:hover { border-color: var(--yellow); }
+
+    .folder-icon {
+      font-size: 36px;
+      line-height: 1;
+    }
+
+    .folder-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .folder-name {
+      font-size: 15px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .folder-meta {
+      font-size: 12px;
+      color: var(--text2);
+      margin-top: 4px;
+    }
+
+    .folder-actions {
+      display: flex;
+      gap: 6px;
+    }
 
     .phone-header {
       display: flex;
@@ -229,9 +302,6 @@
     .phone-status.creating { background: rgba(245,158,11,0.15); color: var(--orange); }
     .phone-status.error { background: rgba(239,68,68,0.15); color: var(--red); }
 
-    .btn-blue { background: #3b82f6; color: #fff; }
-    .btn-blue:hover { opacity: 0.9; }
-
     .phone-info {
       font-size: 13px;
       color: var(--text2);
@@ -255,6 +325,7 @@
       display: flex;
       gap: 6px;
       margin-top: 12px;
+      flex-wrap: wrap;
     }
 
     /* ===== SCHEDULE PANEL ===== */
@@ -400,21 +471,20 @@
       </div>
     </div>
 
+    <!-- Breadcrumb -->
+    <div class="breadcrumb" id="breadcrumb"></div>
+
     <!-- Toolbar -->
-    <div class="toolbar">
-      <h2>Danh sach phone</h2>
+    <div class="toolbar" style="margin-top:16px">
+      <h2 id="folderTitle">Danh sach</h2>
       <div class="toolbar-actions">
+        <button class="btn btn-yellow btn-sm" onclick="openFolderModal()">+ Tao folder</button>
         <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ Tao phone</button>
         <button class="btn btn-green btn-sm" onclick="createBatch()">+ Tao 5 phone</button>
       </div>
     </div>
 
-    <div class="phone-grid" id="phoneGrid">
-      <div class="empty-state">
-        <div class="icon">📱</div>
-        <p>Chua co phone nao. Bam "Tao phone" de bat dau.</p>
-      </div>
-    </div>
+    <div class="phone-grid" id="phoneGrid"></div>
   </div>
 
   <!-- CREATE PHONE MODAL -->
@@ -428,6 +498,37 @@
       <div class="modal-actions">
         <button class="btn btn-outline btn-sm" onclick="closeCreateModal()">Huy</button>
         <button class="btn btn-primary btn-sm" onclick="createPhone()">Tao</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CREATE FOLDER MODAL -->
+  <div class="modal-overlay" id="folderModal">
+    <div class="modal">
+      <h3>Tao folder moi</h3>
+      <div class="form-group">
+        <label>Ten folder</label>
+        <input type="text" id="folderName" placeholder="VD: Nhom 1, Nguoi A">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline btn-sm" onclick="closeFolderModal()">Huy</button>
+        <button class="btn btn-yellow btn-sm" onclick="createFolder()">Tao</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RENAME FOLDER MODAL -->
+  <div class="modal-overlay" id="renameModal">
+    <div class="modal">
+      <h3>Doi ten folder</h3>
+      <input type="hidden" id="renameFolderId">
+      <div class="form-group">
+        <label>Ten moi</label>
+        <input type="text" id="renameInput">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-outline btn-sm" onclick="closeRenameModal()">Huy</button>
+        <button class="btn btn-primary btn-sm" onclick="renameFolder()">Luu</button>
       </div>
     </div>
   </div>
@@ -462,6 +563,9 @@
   <script>
     const API = '';
     let token = localStorage.getItem('token');
+    let currentFolderId = null;
+
+    function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
     // === AUTH ===
     async function doLogin() {
@@ -500,8 +604,10 @@
       document.getElementById('loginPage').style.display = 'none';
       document.getElementById('dashboardPage').style.display = 'block';
       document.getElementById('userLabel').textContent = 'Admin';
-      loadPhones();
+      currentFolderId = null;
+      loadFolder();
       loadSchedule();
+      loadAllStats();
     }
 
     function headers() {
@@ -511,37 +617,87 @@
       };
     }
 
-    // === PHONES ===
-    async function loadPhones() {
+    // === FOLDER NAVIGATION ===
+    async function loadFolder() {
       try {
-        const res = await fetch(API + '/api/phones', { headers: headers() });
+        const q = currentFolderId ? '?parentId=' + currentFolderId : '';
+        const res = await fetch(API + '/api/folders' + q, { headers: headers() });
         if (res.status === 401) { doLogout(); return; }
-        const phones = await res.json();
-        renderPhones(phones);
-        updateStats(phones);
+        const data = await res.json();
+        renderBreadcrumb(data.breadcrumb);
+        renderGrid(data.folders, data.phones);
       } catch (e) {
         console.error(e);
       }
     }
 
-    function updateStats(phones) {
-      document.getElementById('statTotal').textContent = phones.length;
-      document.getElementById('statRunning').textContent = phones.filter(p => p.status === 'running').length;
-      document.getElementById('statStopped').textContent = phones.filter(p => p.status === 'stopped').length;
+    async function loadAllStats() {
+      try {
+        const res = await fetch(API + '/api/phones', { headers: headers() });
+        if (res.status === 401) return;
+        const phones = await res.json();
+        document.getElementById('statTotal').textContent = phones.length;
+        document.getElementById('statRunning').textContent = phones.filter(p => p.status === 'running').length;
+        document.getElementById('statStopped').textContent = phones.filter(p => p.status === 'stopped').length;
+      } catch (e) {}
     }
 
-    function renderPhones(phones) {
+    function navigateFolder(folderId) {
+      currentFolderId = folderId || null;
+      loadFolder();
+    }
+
+    function renderBreadcrumb(crumbs) {
+      const el = document.getElementById('breadcrumb');
+      let html = '<a onclick="navigateFolder(null)">Trang chu</a>';
+      for (let i = 0; i < crumbs.length; i++) {
+        html += ' <span class="sep">/</span> ';
+        if (i < crumbs.length - 1) {
+          html += '<a onclick="navigateFolder(\'' + crumbs[i].id + '\')">' + esc(crumbs[i].name) + '</a>';
+        } else {
+          html += '<span class="current">' + esc(crumbs[i].name) + '</span>';
+        }
+      }
+      el.innerHTML = html;
+
+      const title = document.getElementById('folderTitle');
+      if (crumbs.length > 0) {
+        title.textContent = crumbs[crumbs.length - 1].name;
+      } else {
+        title.textContent = 'Danh sach';
+      }
+    }
+
+    function renderGrid(folders, phones) {
       const grid = document.getElementById('phoneGrid');
-      if (phones.length === 0) {
-        grid.innerHTML = '<div class="empty-state"><div class="icon">📱</div><p>Chua co phone nao. Bam "Tao phone" de bat dau.</p></div>';
+
+      if (folders.length === 0 && phones.length === 0) {
+        grid.innerHTML = '<div class="empty-state"><div class="icon">📁</div><p>Folder trong. Tao folder hoac phone de bat dau.</p></div>';
         return;
       }
 
-      function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-      grid.innerHTML = phones.map(p => {
+      let html = '';
+
+      for (const f of folders) {
+        const safeName = esc(f.name);
+        html += `
+        <div class="folder-card" onclick="navigateFolder('${f.id}')">
+          <div class="folder-icon">📁</div>
+          <div class="folder-info">
+            <div class="folder-name">${safeName}</div>
+            <div class="folder-meta">Tao luc: ${new Date(f.createdAt).toLocaleDateString('vi-VN')}</div>
+          </div>
+          <div class="folder-actions" onclick="event.stopPropagation()">
+            <button class="btn btn-outline btn-sm" onclick="openRenameModal('${f.id}', '${safeName.replace(/'/g, "\\'")}')">Sua</button>
+            <button class="btn btn-red btn-sm" onclick="deleteFolder('${f.id}')">Xoa</button>
+          </div>
+        </div>`;
+      }
+
+      for (const p of phones) {
         const statusText = p.status === 'running' ? 'Dang chay' : p.status === 'creating' ? 'Dang tao...' : p.status === 'error' ? 'Loi' : 'Da dung';
         const safeName = esc(p.name);
-        return `
+        html += `
         <div class="phone-card">
           <div class="phone-header">
             <div class="phone-name">${safeName}</div>
@@ -553,32 +709,87 @@
           <div class="phone-info">IMEI: <span>${p.device.imei}</span></div>
           <div class="phone-info">Port: <span>${p.port || '-'}</span></div>
           ${p.zaloInstalled ? '<div class="phone-info" style="color:var(--green)">Zalo: Da cai</div>' : ''}
-          ${p.proxy ? `<div class="phone-proxy">Proxy: <span>${p.proxy.split(':').slice(0,2).join(':')}</span></div>` : '<div class="phone-proxy">Chua co proxy</div>'}
+          ${p.proxy ? '<div class="phone-proxy">Proxy: <span>' + p.proxy.split(':').slice(0,2).join(':') + '</span></div>' : '<div class="phone-proxy">Chua co proxy</div>'}
           <div id="proxyResult-${p.id}" style="font-size:12px;margin:4px 0;color:var(--green);display:none;"></div>
           <div class="phone-actions">
-            ${p.status === 'running' ? `<button class="btn btn-blue btn-sm" onclick="openPhone(${p.port}, '${safeName.replace(/'/g, "\\'")}')">Mo</button>` : ''}
+            ${p.status === 'running' ? '<button class="btn btn-blue btn-sm" onclick="openPhone(' + p.port + ', \'' + safeName.replace(/'/g, "\\'") + '\')">Mo</button>' : ''}
             ${p.status === 'stopped'
-              ? `<button class="btn btn-green btn-sm" onclick="startPhone('${p.id}')">Bat</button>`
-              : p.status === 'running' ? `<button class="btn btn-red btn-sm" onclick="stopPhone('${p.id}')">Tat</button>` : ''
+              ? '<button class="btn btn-green btn-sm" onclick="startPhone(\'' + p.id + '\')">Bat</button>'
+              : p.status === 'running' ? '<button class="btn btn-red btn-sm" onclick="stopPhone(\'' + p.id + '\')">Tat</button>' : ''
             }
             <button class="btn btn-outline btn-sm" onclick="openProxyModal('${p.id}')">Proxy</button>
-            ${p.status === 'running' ? `<button class="btn btn-outline btn-sm" onclick="checkProxy('${p.id}')">Check IP</button>` : ''}
+            ${p.status === 'running' ? '<button class="btn btn-outline btn-sm" onclick="checkProxy(\'' + p.id + '\')">Check IP</button>' : ''}
             <button class="btn btn-red btn-sm" onclick="deletePhone('${p.id}')">Xoa</button>
           </div>
-        </div>
-      `}).join('');
+        </div>`;
+      }
+
+      grid.innerHTML = html;
     }
 
+    // === FOLDER CRUD ===
+    function openFolderModal() {
+      document.getElementById('folderName').value = '';
+      document.getElementById('folderModal').classList.add('active');
+    }
+
+    function closeFolderModal() {
+      document.getElementById('folderModal').classList.remove('active');
+    }
+
+    async function createFolder() {
+      const name = document.getElementById('folderName').value.trim();
+      if (!name) return alert('Nhap ten folder');
+      await fetch(API + '/api/folders', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ name, parentId: currentFolderId }),
+      });
+      closeFolderModal();
+      loadFolder();
+    }
+
+    function openRenameModal(id, name) {
+      document.getElementById('renameFolderId').value = id;
+      document.getElementById('renameInput').value = name;
+      document.getElementById('renameModal').classList.add('active');
+    }
+
+    function closeRenameModal() {
+      document.getElementById('renameModal').classList.remove('active');
+    }
+
+    async function renameFolder() {
+      const id = document.getElementById('renameFolderId').value;
+      const name = document.getElementById('renameInput').value.trim();
+      if (!name) return;
+      await fetch(API + '/api/folders/' + id, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify({ name }),
+      });
+      closeRenameModal();
+      loadFolder();
+    }
+
+    async function deleteFolder(id) {
+      if (!confirm('Xoa folder nay? Phone trong folder se duoc chuyen ra ngoai.')) return;
+      await fetch(API + '/api/folders/' + id, { method: 'DELETE', headers: headers() });
+      loadFolder();
+    }
+
+    // === PHONES ===
     async function createPhone() {
       const name = document.getElementById('phoneName').value || '';
       await fetch(API + '/api/phones', {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, folderId: currentFolderId }),
       });
       closeCreateModal();
       document.getElementById('phoneName').value = '';
-      loadPhones();
+      loadFolder();
+      loadAllStats();
     }
 
     async function createBatch() {
@@ -586,32 +797,35 @@
         await fetch(API + '/api/phones', {
           method: 'POST',
           headers: headers(),
-          body: JSON.stringify({ name: '' }),
+          body: JSON.stringify({ name: '', folderId: currentFolderId }),
         });
       }
-      loadPhones();
+      loadFolder();
+      loadAllStats();
     }
 
     async function startPhone(id) {
       await fetch(API + '/api/phones/' + id + '/start', { method: 'POST', headers: headers() });
-      loadPhones();
+      loadFolder();
+      loadAllStats();
     }
 
     async function stopPhone(id) {
       await fetch(API + '/api/phones/' + id + '/stop', { method: 'POST', headers: headers() });
-      loadPhones();
+      loadFolder();
+      loadAllStats();
     }
 
     async function deletePhone(id) {
       if (!confirm('Xoa phone nay?')) return;
       await fetch(API + '/api/phones/' + id, { method: 'DELETE', headers: headers() });
-      loadPhones();
+      loadFolder();
+      loadAllStats();
     }
 
     // === OPEN PHONE ===
     function openPhone(port, name) {
       const host = window.location.hostname;
-      // Port le (5555,5557,5559) -> emulator-(port-1) (5554,5556,5558)
       var udid = 'emulator-' + (port - 1);
       var wsParam = encodeURIComponent('ws://' + host + ':8000/?action=proxy-adb&remote=tcp%3A8886&udid=' + udid);
       var url = 'http://' + host + ':8000/#!action=stream&udid=' + udid + '&player=broadway&ws=' + wsParam;
@@ -647,7 +861,7 @@
       });
 
       closeProxyModal();
-      loadPhones();
+      loadFolder();
     }
 
     async function checkProxy(id) {
@@ -729,9 +943,8 @@
       showDashboard();
     }
 
-    // Auto refresh moi 5 giay
     setInterval(() => {
-      if (token) loadPhones();
+      if (token) { loadFolder(); loadAllStats(); }
     }, 5000);
   </script>
 </body>

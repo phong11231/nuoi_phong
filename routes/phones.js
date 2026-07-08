@@ -10,8 +10,8 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { name } = req.body;
-  const phone = phoneManager.createPhone(name);
+  const { name, folderId } = req.body;
+  const phone = phoneManager.createPhone(name, folderId);
   res.status(201).json(phone);
 });
 

@@ -175,7 +175,7 @@ class PhoneManager {
     return port;
   }
 
-  createPhone(name) {
+  createPhone(name, folderId) {
     const id = uuidv4();
     const port = this._getNextPort();
     const deviceConfig = PHONE_MODELS[Math.floor(Math.random() * PHONE_MODELS.length)];
@@ -184,6 +184,7 @@ class PhoneManager {
     const phone = {
       id,
       name: name || `Phone ${this.phones.size + 1}`,
+      folderId: folderId || null,
       status: 'creating',
       port,
       containerName,
