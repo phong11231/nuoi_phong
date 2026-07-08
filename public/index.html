@@ -430,6 +430,11 @@
         <div class="ram-bar-bg"><div class="ram-bar-fill" id="sysRamBar" style="width:0%;background:var(--green)"></div></div>
       </div>
       <div class="sys-card">
+        <div class="sys-label">Swap</div>
+        <div class="sys-value" id="sysSwap">--</div>
+        <div class="ram-bar-bg"><div class="ram-bar-fill" id="sysSwapBar" style="width:0%;background:var(--green)"></div></div>
+      </div>
+      <div class="sys-card">
         <div class="sys-label">CPU</div>
         <div class="sys-value" id="sysCpu">--</div>
       </div>
@@ -596,6 +601,14 @@
         var bar = document.getElementById('sysRamBar');
         bar.style.width = pct + '%';
         bar.style.background = color;
+        if (s.swap && s.swap.total > 0) {
+          var spct = s.swap.percent;
+          var scolor = spct > 85 ? 'var(--red)' : spct > 65 ? 'var(--orange)' : 'var(--green)';
+          document.getElementById('sysSwap').textContent = s.swap.used + ' / ' + s.swap.total + ' MB (' + spct + '%)';
+          var sbar = document.getElementById('sysSwapBar');
+          sbar.style.width = spct + '%';
+          sbar.style.background = scolor;
+        }
         document.getElementById('sysCpu').textContent = s.cpu.cores + ' cores - Load: ' + s.cpu.load1m;
         var sec = Math.floor(s.uptime);
         var d = Math.floor(sec / 86400); sec %= 86400;
