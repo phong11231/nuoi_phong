@@ -137,10 +137,56 @@ class PhoneManager {
         const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
         data.forEach(p => this.phones.set(p.id, p));
         console.log(`Da load ${data.length} phone tu file`);
-        this._restoreRelays();
+        this._syncContainerStatus().then(() => {
+          this._restoreRelays();
+          this._reconnectRunningPhones();
+        });
       }
     } catch (e) {
       console.error('Loi load data:', e.message);
+    }
+  }
+
+  async _syncContainerStatus() {
+    if (!docker) return;
+    let changed = false;
+    for (const phone of this.phones.values()) {
+      if (!phone.containerId) continue;
+      try {
+        const container = docker.getContainer(phone.containerId);
+        const info = await container.inspect();
+        const isRunning = info.State.Running;
+        if (phone.status === 'running' && !isRunning) {
+          console.log(`${phone.name}: container da stop, cap nhat status`);
+          phone.status = 'stopped';
+          changed = true;
+        } else if (phone.status === 'stopped' && isRunning) {
+          console.log(`${phone.name}: container dang chay, cap nhat status`);
+          phone.status = 'running';
+          changed = true;
+        }
+      } catch (e) {
+        if (e.statusCode === 404) {
+          console.log(`${phone.name}: container khong ton tai, dat status error`);
+          phone.status = 'error';
+          phone.error = 'Container not found';
+          changed = true;
+        }
+      }
+    }
+    if (changed) this._saveData();
+  }
+
+  async _reconnectRunningPhones() {
+    for (const phone of this.phones.values()) {
+      if (phone.status === 'running') {
+        console.log(`Reconnect ws-scrcpy cho ${phone.name}...`);
+        try {
+          await this._connectWsScrcpy(phone);
+        } catch (e) {
+          console.error(`Loi reconnect ${phone.name}:`, e.message);
+        }
+      }
     }
   }
 
