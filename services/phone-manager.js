@@ -359,6 +359,8 @@ class PhoneManager {
           }
         }
 
+        // Copy ADB key san cho lan restart sau
+        await this._authorizeAdbKey(phone);
         await this._connectWsScrcpy(phone);
 
       } else {
@@ -415,13 +417,15 @@ class PhoneManager {
       }
       const { stdout } = await runCmd(`docker exec ${c} getprop sys.boot_completed`);
       if (stdout === '1') {
-        console.log(`${phone.name}: Boot xong, khoi dong lai adbd...`);
-        // Tat ADB auth + restart adbd
-        await runCmd(`docker exec ${c} sh -c "mount -o remount,rw /system 2>/dev/null; sed -i '/ro.adb.secure/d' /system/build.prop; echo 'ro.adb.secure=0' >> /system/build.prop"`);
-        await runCmd(`docker exec ${c} setprop ro.adb.secure 0`);
+        console.log(`${phone.name}: Boot xong, chuan bi adbd...`);
+        // Dam bao ADB TCP port
         await runCmd(`docker exec ${c} setprop persist.adb.tcp.port 5555`);
+        // Copy ADB key TRUOC khi lam gi khac
+        await this._authorizeAdbKey(phone);
+        // Set ro.adb.secure=0 va restart adbd de doc key
+        await runCmd(`docker exec ${c} setprop ro.adb.secure 0`);
         await runCmd(`docker exec ${c} setprop ctl.restart adbd`);
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 3000));
         // Bat man hinh
         await runCmd(`docker exec ${c} svc power stayon true`);
         await runCmd(`docker exec ${c} settings put system screen_off_timeout 2147483647`);
@@ -452,40 +456,69 @@ class PhoneManager {
 
   async _authorizeAdbKey(phone) {
     const c = phone.containerName;
-    // Copy ADB public key tu ws-scrcpy vao phone de authorize
+    // Kiem tra ws-scrcpy co ADB key chua
+    const { stdout: wsKeyExists } = await runCmd(`docker exec ws-scrcpy sh -c "test -f /root/.android/adbkey.pub && echo YES || echo NO"`);
+    if (wsKeyExists !== 'YES') {
+      console.log(`${phone.name}: ws-scrcpy chua co ADB key, tao moi...`);
+      await runCmd(`docker exec ws-scrcpy adb start-server 2>/dev/null`);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    // Copy key tu ws-scrcpy ra host
     await runCmd(`docker exec ws-scrcpy cat /root/.android/adbkey.pub > /tmp/ws_adbkey.pub 2>/dev/null`);
+    const { stdout: hostKeySize } = await runCmd(`wc -c < /tmp/ws_adbkey.pub 2>/dev/null`);
+    console.log(`${phone.name}: ws-scrcpy key size: ${hostKeySize} bytes`);
+    // Copy vao phone voi quyen dung (system:shell = 1000:2000)
     await runCmd(`docker exec ${c} mkdir -p /data/misc/adb`);
     await runCmd(`docker cp /tmp/ws_adbkey.pub ${c}:/data/misc/adb/adb_keys`);
-    await runCmd(`docker exec ${c} chmod 640 /data/misc/adb/adb_keys`);
-    console.log(`${phone.name}: Da copy ADB key tu ws-scrcpy`);
+    await runCmd(`docker exec ${c} sh -c "chown 1000:2000 /data/misc/adb/adb_keys && chmod 640 /data/misc/adb/adb_keys"`);
+    // Verify
+    const { stdout: phoneKeyInfo } = await runCmd(`docker exec ${c} sh -c "ls -la /data/misc/adb/adb_keys 2>/dev/null && echo '---' && wc -c < /data/misc/adb/adb_keys"`);
+    console.log(`${phone.name}: phone adb_keys: ${phoneKeyInfo}`);
   }
 
   async _connectWsScrcpy(phone) {
     console.log(`${phone.name}: Dang ket noi ws-scrcpy...`);
-    // Authorize ws-scrcpy ADB key truoc
+    // 1. Copy ADB key vao phone TRUOC khi restart adbd
     await this._authorizeAdbKey(phone);
-    // Restart adbd de nhan key moi
+    // 2. Restart adbd de doc key moi
     await runCmd(`docker exec ${phone.containerName} setprop ctl.restart adbd`);
-    await new Promise(r => setTimeout(r, 5000));
-    // Disconnect truoc (xoa entry cu)
+    await new Promise(r => setTimeout(r, 3000));
+    // Verify adbd dang lang nghe
+    const { stdout: adbdCheck } = await runCmd(`docker exec ${phone.containerName} sh -c "getprop ro.adb.secure && netstat -tlnp 2>/dev/null | grep 5555 || echo 'port 5555 not listening'"`);
+    console.log(`${phone.name}: adbd check: ${adbdCheck}`);
+    // 3. Disconnect entry cu trong ws-scrcpy
     await runCmd(`docker exec ws-scrcpy adb disconnect 172.17.0.1:${phone.port} 2>/dev/null`);
-    await new Promise(r => setTimeout(r, 2000));
-    // Connect lai - thu 3 lan neu that bai
+    await new Promise(r => setTimeout(r, 1000));
+    // 4. Connect - thu 5 lan
     let connected = false;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       const { stdout } = await runCmd(`docker exec ws-scrcpy adb connect 172.17.0.1:${phone.port}`);
       console.log(`  ws-scrcpy connect ${phone.name} (${phone.port}) lan ${i+1}: ${stdout}`);
       if (stdout.includes('connected')) {
         connected = true;
         break;
       }
-      await new Promise(r => setTimeout(r, 5000));
+      await new Promise(r => setTimeout(r, 3000));
     }
     if (!connected) {
-      console.log(`${phone.name}: Khong the connect ws-scrcpy sau 3 lan thu`);
+      console.log(`${phone.name}: Khong the connect ws-scrcpy sau 5 lan thu`);
     }
+    // 5. Kiem tra trang thai device
     const { stdout } = await runCmd(`docker exec ws-scrcpy adb devices`);
     console.log(`${phone.name}: ws-scrcpy devices: ${stdout.replace(/\n/g, ', ')}`);
+    if (stdout.includes('unauthorized')) {
+      console.log(`${phone.name}: CANH BAO - device van unauthorized! Thu lai...`);
+      // Thu copy key lai va restart adbd 1 lan nua
+      await this._authorizeAdbKey(phone);
+      await runCmd(`docker exec ${phone.containerName} setprop ctl.restart adbd`);
+      await new Promise(r => setTimeout(r, 5000));
+      await runCmd(`docker exec ws-scrcpy adb disconnect 172.17.0.1:${phone.port} 2>/dev/null`);
+      await new Promise(r => setTimeout(r, 1000));
+      const { stdout: retry } = await runCmd(`docker exec ws-scrcpy adb connect 172.17.0.1:${phone.port}`);
+      console.log(`  ws-scrcpy retry connect: ${retry}`);
+      const { stdout: devicesRetry } = await runCmd(`docker exec ws-scrcpy adb devices`);
+      console.log(`${phone.name}: ws-scrcpy devices (retry): ${devicesRetry.replace(/\n/g, ', ')}`);
+    }
   }
 
   async _disconnectWsScrcpy(phone) {
