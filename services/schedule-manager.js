@@ -1,4 +1,8 @@
 const { phoneManager } = require('./phone-manager');
+const fs = require('fs');
+const path = require('path');
+
+const SCHED_FILE = path.join(__dirname, '..', 'schedule-data.json');
 
 class ScheduleManager {
   constructor() {
@@ -12,6 +16,32 @@ class ScheduleManager {
     this.rotationIndex = 0;
     this.timer = null;
     this.phase = 'idle';
+    this._loadState();
+  }
+
+  _loadState() {
+    try {
+      if (fs.existsSync(SCHED_FILE)) {
+        const data = JSON.parse(fs.readFileSync(SCHED_FILE, 'utf8'));
+        this.config = { ...this.config, ...data.config };
+        this.rotationIndex = data.rotationIndex || 0;
+        if (this.config.enabled) {
+          console.log('[Schedule] Phuc hoi schedule tu file, tu dong bat lai');
+          this.start();
+        }
+      }
+    } catch (e) {
+      console.error('[Schedule] Loi load state:', e.message);
+    }
+  }
+
+  _saveState() {
+    try {
+      fs.writeFileSync(SCHED_FILE, JSON.stringify({
+        config: this.config,
+        rotationIndex: this.rotationIndex,
+      }, null, 2));
+    } catch (e) {}
   }
 
   updateConfig(config) {
@@ -19,6 +49,7 @@ class ScheduleManager {
     if (config.runMinutes) this.config.runMinutes = config.runMinutes;
     if (config.restMinutes) this.config.restMinutes = config.restMinutes;
     if (typeof config.enabled !== 'undefined') this.config.enabled = config.enabled;
+    this._saveState();
     return this.config;
   }
 
@@ -41,7 +72,7 @@ class ScheduleManager {
       this.timer = null;
     }
     this.config.enabled = true;
-    this.rotationIndex = 0;
+    this._saveState();
     console.log(`[Schedule] Bat dau luan phien: ${this.config.phonesPerBatch} phone/luot, chay ${this.config.runMinutes}p, nghi ${this.config.restMinutes}p`);
     this._startBatch();
   }
@@ -53,6 +84,7 @@ class ScheduleManager {
       this.timer = null;
     }
     this.phase = 'idle';
+    this._saveState();
     console.log('[Schedule] Da tat luan phien');
   }
 
@@ -85,6 +117,7 @@ class ScheduleManager {
       batch.push(allPhones[idx]);
     }
     this.rotationIndex = (this.rotationIndex + batchSize) % allPhones.length;
+    this._saveState();
 
     // Bat batch moi
     for (const phone of batch) {

@@ -71,7 +71,7 @@ function luhnCheckDigit(digits) {
   let sum = 0;
   for (let i = digits.length - 1; i >= 0; i--) {
     let d = parseInt(digits[i]);
-    if ((digits.length - i) % 2 === 1) {
+    if ((digits.length - i) % 2 === 0) {
       d *= 2;
       if (d > 9) d -= 9;
     }
@@ -137,9 +137,24 @@ class PhoneManager {
         const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
         data.forEach(p => this.phones.set(p.id, p));
         console.log(`Da load ${data.length} phone tu file`);
+        this._restoreRelays();
       }
     } catch (e) {
       console.error('Loi load data:', e.message);
+    }
+  }
+
+  _restoreRelays() {
+    for (const phone of this.phones.values()) {
+      if (phone.proxy && phone.relayPort && phone.status === 'running') {
+        const parts = phone.proxy.split(':');
+        const proxyUser = parts[2] || '';
+        const proxyPass = parts[3] || '';
+        if (proxyUser && proxyPass) {
+          this._startProxyRelay(phone, phone.relayPort, parts[0], parts[1], proxyUser, proxyPass);
+          console.log(`Phuc hoi relay cho ${phone.name} tren port ${phone.relayPort}`);
+        }
+      }
     }
   }
 

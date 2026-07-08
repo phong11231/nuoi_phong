@@ -537,12 +537,14 @@
         return;
       }
 
+      function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
       grid.innerHTML = phones.map(p => {
         const statusText = p.status === 'running' ? 'Dang chay' : p.status === 'creating' ? 'Dang tao...' : p.status === 'error' ? 'Loi' : 'Da dung';
+        const safeName = esc(p.name);
         return `
         <div class="phone-card">
           <div class="phone-header">
-            <div class="phone-name">${p.name}</div>
+            <div class="phone-name">${safeName}</div>
             <div class="phone-status ${p.status}">${statusText}</div>
           </div>
           <div class="phone-info">Thiet bi: <span>${p.device.brand} ${p.device.model}</span></div>
@@ -554,7 +556,7 @@
           ${p.proxy ? `<div class="phone-proxy">Proxy: <span>${p.proxy.split(':').slice(0,2).join(':')}</span></div>` : '<div class="phone-proxy">Chua co proxy</div>'}
           <div id="proxyResult-${p.id}" style="font-size:12px;margin:4px 0;color:var(--green);display:none;"></div>
           <div class="phone-actions">
-            ${p.status === 'running' ? `<button class="btn btn-blue btn-sm" onclick="openPhone(${p.port}, '${p.name.replace(/'/g, "\\'")}')">Mo</button>` : ''}
+            ${p.status === 'running' ? `<button class="btn btn-blue btn-sm" onclick="openPhone(${p.port}, '${safeName.replace(/'/g, "\\'")}')">Mo</button>` : ''}
             ${p.status === 'stopped'
               ? `<button class="btn btn-green btn-sm" onclick="startPhone('${p.id}')">Bat</button>`
               : p.status === 'running' ? `<button class="btn btn-red btn-sm" onclick="stopPhone('${p.id}')">Tat</button>` : ''
