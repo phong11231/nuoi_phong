@@ -330,21 +330,7 @@ class PhoneManager {
         console.log(`${phone.name}: Da bat man hinh`);
 
         const dev = phone.device;
-        const isQcom = dev.hardware === 'qcom' || dev.hardware.startsWith('sm');
-        const fp = dev.fingerprint;
-        const buildDesc = `${dev.device}-user 13 TP1A.220624.014 release-keys`;
-        // Partition-specific props (ghi vao /system/build.prop, load truoc vendor/product)
-        const partitions = ['system', 'vendor', 'product', 'system_ext', 'odm', 'vendor_dlkm'];
-        const partitionProps = partitions.map(p => [
-          `ro.product.${p}.model=${dev.model}`,
-          `ro.product.${p}.brand=${dev.brand}`,
-          `ro.product.${p}.manufacturer=${dev.brand}`,
-          `ro.product.${p}.device=${dev.device}`,
-          `ro.product.${p}.name=${dev.device}`,
-          `ro.${p}.build.fingerprint=${fp}`,
-        ]).flat();
         const props = [
-          ...partitionProps,
           `ro.product.model=${dev.model}`,
           `ro.product.brand=${dev.brand}`,
           `ro.product.manufacturer=${dev.brand}`,
@@ -352,29 +338,15 @@ class PhoneManager {
           `ro.product.board=${dev.board}`,
           `ro.product.name=${dev.device}`,
           `ro.hardware=${dev.hardware}`,
-          `ro.hardware.chipname=${dev.hardware}`,
-          `ro.build.product=${dev.device}`,
-          `ro.build.fingerprint=${fp}`,
-          `ro.build.display.id=${fp.split('/').pop() || 'TP1A.220624.014'}`,
-          `ro.build.description=${buildDesc}`,
-          `ro.build.flavor=${dev.device}-user`,
+          `ro.build.fingerprint=${dev.fingerprint}`,
+          `ro.build.display.id=${dev.fingerprint.split('/').pop() || 'OPR1.170623.027'}`,
           `ro.serialno=${dev.serial}`,
           `ro.boot.serialno=${dev.serial}`,
-          `ro.boot.hardware=${dev.hardware}`,
-          `ro.board.platform=${isQcom ? dev.board : dev.hardware}`,
-          `ro.build.type=user`,
-          `ro.build.tags=release-keys`,
-          `ro.debuggable=0`,
-          `ro.secure=1`,
-          `ro.adb.secure=0`,
-          `ro.boot.vbmeta.device_state=locked`,
-          `ro.boot.verifiedbootstate=green`,
-          `ro.boot.flash.locked=1`,
           `ro.kernel.qemu=0`,
           `ro.boot.qemu=0`,
-          `ro.hardware.egl=${isQcom ? 'adreno' : 'mali'}`,
-          `ro.hardware.vulkan=${isQcom ? 'adreno' : 'mali'}`,
-          `ro.hardware.gralloc=${isQcom ? 'adreno' : 'mali'}`,
+          `ro.boot.hardware=${dev.hardware}`,
+          `ro.hardware.chipname=${dev.hardware}`,
+          `ro.build.product=${dev.device}`,
           `persist.sys.timezone=Asia/Ho_Chi_Minh`,
           `gsm.operator.alpha=Viettel`,
           `gsm.operator.numeric=45204`,
@@ -384,20 +356,27 @@ class PhoneManager {
           `gsm.sim.operator.iso-country=vn`,
           `gsm.sim.state=READY`,
           `ro.telephony.default_network=13`,
+          `ro.debuggable=0`,
+          `ro.secure=1`,
+          `ro.adb.secure=0`,
+          `ro.build.type=user`,
+          `ro.build.tags=release-keys`,
+          `ro.build.description=${dev.device}-user 13 TP1A.220624.014 release-keys`,
+          `ro.boot.vbmeta.device_state=locked`,
+          `ro.boot.verifiedbootstate=green`,
+          `ro.boot.flash.locked=1`,
           `ro.setupwizard.mode=OPTIONAL`,
           `ro.com.google.gmsversion=13_202301`,
-          `ro.com.google.clientidbase=android-${dev.brand.toLowerCase()}`,
         ];
         const sedCmd = props.map(p => {
           const [key] = p.split('=');
           return `-e '/^${key}=/d'`;
         }).join(' ');
         const appendCmd = props.map(p => `echo '${p}' >> /system/build.prop`).join(' && ');
-        // Chi sua /system/build.prop (an toan, khong dung vendor/product/odm)
         await runCmd(`docker exec ${c} sh -c "mount -o remount,rw /system 2>/dev/null; sed -i ${sedCmd} /system/build.prop && ${appendCmd}"`);
         await runCmd(`docker exec ${c} settings put secure android_id ${dev.androidId}`);
         await runCmd(`docker exec ${c} setprop net.hostname android-${dev.androidId.substring(0,8)}`);
-        console.log(`${phone.name}: Da spoof device: ${dev.brand} ${dev.model}`);
+        console.log(`${phone.name}: Da spoof device info: ${dev.brand} ${dev.model}`);
 
         // Cai Zalo bang docker exec + pm (khong can ADB)
         const { stdout: hasZalo } = await runCmd(`docker exec ${c} ls /data/zalo/ 2>/dev/null`);
