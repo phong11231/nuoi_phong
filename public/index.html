@@ -739,55 +739,12 @@
     let topZ = 501;
 
     function openPhone(port, name) {
-      var winId = 'pw-' + port;
-      if (phoneWindows[winId]) {
-        var existing = phoneWindows[winId];
-        if (existing.minimized) {
-          existing.el.style.display = 'flex';
-          existing.minimized = false;
-        }
-        bringToFront(winId);
-        updateTaskbar();
-        return;
-      }
-
       var host = window.location.hostname;
       var udid = '172.17.0.1:' + port;
       var uidEnc = encodeURIComponent(udid);
       var wsParam = encodeURIComponent('ws://' + host + ':8000/?action=proxy-adb&remote=tcp%3A8886&udid=' + uidEnc);
       var url = 'http://' + host + ':8000/#!action=stream&udid=' + uidEnc + '&player=mse&ws=' + wsParam;
-
-      var count = Object.keys(phoneWindows).length;
-      var offsetX = 60 + (count % 5) * 30;
-      var offsetY = 60 + (count % 5) * 30;
-
-      var win = document.createElement('div');
-      win.className = 'phone-window active-win';
-      win.id = winId;
-      win.style.left = offsetX + 'px';
-      win.style.top = offsetY + 'px';
-      win.style.width = '340px';
-      win.style.height = '620px';
-      win.style.zIndex = ++topZ;
-
-      win.innerHTML = '<div class="win-titlebar">' +
-        '<span class="win-title">' + esc(name || 'Phone') + '</span>' +
-        '<div class="win-btns">' +
-          '<button class="win-btn win-btn-min" onclick="minimizeWin(\'' + winId + '\')" title="Thu nho">−</button>' +
-          '<button class="win-btn win-btn-close" onclick="closeWin(\'' + winId + '\')" title="Dong">×</button>' +
-        '</div>' +
-      '</div>' +
-      '<iframe src="' + url + '" allow="autoplay"></iframe>' +
-      '<div class="win-resize"></div>';
-
-      document.body.appendChild(win);
-
-      phoneWindows[winId] = { el: win, name: name || 'Phone', port: port, minimized: false };
-
-      win.addEventListener('mousedown', function() { bringToFront(winId); });
-      initDrag(win, win.querySelector('.win-titlebar'));
-      initResize(win, win.querySelector('.win-resize'));
-      updateTaskbar();
+      window.open(url, 'phone_' + port);
     }
 
     function bringToFront(winId) {
