@@ -414,14 +414,21 @@ class PhoneManager {
       }
       const { stdout } = await runCmd(`docker exec ${c} getprop sys.boot_completed`);
       if (stdout === '1') {
-        console.log(`${phone.name}: Boot xong, cho adbd san sang...`);
-        // Cho 30 giay de adbd va display khoi tao day du
+        console.log(`${phone.name}: Boot xong, khoi dong lai adbd...`);
+        // Force restart adbd qua init
+        await runCmd(`docker exec ${c} setprop persist.adb.tcp.port 5555`);
+        await runCmd(`docker exec ${c} setprop ctl.restart adbd`);
+        await new Promise(r => setTimeout(r, 5000));
+        // Check adbd co listen port 5555 khong
+        const { stdout: portCheck } = await runCmd(`docker exec ${c} sh -c "netstat -tlnp 2>/dev/null | grep 5555 || ss -tlnp 2>/dev/null | grep 5555 || echo NO_LISTEN"`);
+        console.log(`${phone.name}: adbd port check: ${portCheck}`);
+        // Bat man hinh
         await runCmd(`docker exec ${c} svc power stayon true`);
         await runCmd(`docker exec ${c} settings put system screen_off_timeout 2147483647`);
         await runCmd(`docker exec ${c} input keyevent 26`);
         await runCmd(`docker exec ${c} input keyevent 82`);
         await runCmd(`docker exec ${c} input keyevent 3`);
-        await new Promise(r => setTimeout(r, 30000));
+        await new Promise(r => setTimeout(r, 5000));
         console.log(`${phone.name}: Man hinh da san sang`);
 
         phone.status = 'running';
