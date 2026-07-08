@@ -450,8 +450,23 @@ class PhoneManager {
     setTimeout(check, 15000);
   }
 
+  async _authorizeAdbKey(phone) {
+    const c = phone.containerName;
+    // Copy ADB public key tu ws-scrcpy vao phone de authorize
+    await runCmd(`docker exec ws-scrcpy cat /root/.android/adbkey.pub > /tmp/ws_adbkey.pub 2>/dev/null`);
+    await runCmd(`docker exec ${c} mkdir -p /data/misc/adb`);
+    await runCmd(`docker cp /tmp/ws_adbkey.pub ${c}:/data/misc/adb/adb_keys`);
+    await runCmd(`docker exec ${c} chmod 640 /data/misc/adb/adb_keys`);
+    console.log(`${phone.name}: Da copy ADB key tu ws-scrcpy`);
+  }
+
   async _connectWsScrcpy(phone) {
     console.log(`${phone.name}: Dang ket noi ws-scrcpy...`);
+    // Authorize ws-scrcpy ADB key truoc
+    await this._authorizeAdbKey(phone);
+    // Restart adbd de nhan key moi
+    await runCmd(`docker exec ${phone.containerName} setprop ctl.restart adbd`);
+    await new Promise(r => setTimeout(r, 5000));
     // Disconnect truoc (xoa entry cu)
     await runCmd(`docker exec ws-scrcpy adb disconnect 172.17.0.1:${phone.port} 2>/dev/null`);
     await new Promise(r => setTimeout(r, 2000));
