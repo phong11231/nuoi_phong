@@ -284,7 +284,11 @@ class PhoneManager {
         console.log(`${phone.name}: Da bat man hinh`);
 
         const dev = phone.device;
+        const isQcom = dev.hardware === 'qcom' || dev.hardware.startsWith('sm');
+        const cpuAbi = 'arm64-v8a';
+        const cpuAbi2 = 'armeabi-v7a';
         const props = [
+          // Device identity
           `ro.product.model=${dev.model}`,
           `ro.product.brand=${dev.brand}`,
           `ro.product.manufacturer=${dev.brand}`,
@@ -296,11 +300,35 @@ class PhoneManager {
           `ro.build.display.id=${dev.fingerprint.split('/').pop() || 'OPR1.170623.027'}`,
           `ro.serialno=${dev.serial}`,
           `ro.boot.serialno=${dev.serial}`,
-          `ro.kernel.qemu=0`,
-          `ro.boot.qemu=0`,
           `ro.boot.hardware=${dev.hardware}`,
           `ro.hardware.chipname=${dev.hardware}`,
           `ro.build.product=${dev.device}`,
+          // CPU/ABI spoof (che x86)
+          `ro.product.cpu.abi=${cpuAbi}`,
+          `ro.product.cpu.abilist=${cpuAbi},${cpuAbi2},armeabi`,
+          `ro.product.cpu.abilist64=${cpuAbi}`,
+          `ro.product.cpu.abilist32=${cpuAbi2},armeabi`,
+          `persist.sys.dalvik.vm.lib.2=libart.so`,
+          `ro.boot.hardware.sku=${dev.device}`,
+          `ro.board.platform=${isQcom ? dev.board : dev.hardware}`,
+          // Anti-emulator
+          `ro.kernel.qemu=0`,
+          `ro.boot.qemu=0`,
+          `ro.kernel.android.checkjni=0`,
+          `ro.boot.selinux=enforcing`,
+          `ro.build.selinux=1`,
+          `init.svc.qemu-props=`,
+          `init.svc.goldfish-logcat=`,
+          `init.svc.goldfish-setup=`,
+          `ro.hardware.egl=${isQcom ? 'adreno' : 'mali'}`,
+          `ro.hardware.vulkan=${isQcom ? 'adreno' : 'mali'}`,
+          `ro.opengles.version=196610`,
+          // Battery spoof (gia lap pin)
+          `status.battery.level=78`,
+          `status.battery.state=5`,
+          `status.battery.level_raw=78`,
+          `status.battery.level_scale=100`,
+          // SIM / Network
           `persist.sys.timezone=Asia/Ho_Chi_Minh`,
           `gsm.operator.alpha=Viettel`,
           `gsm.operator.numeric=45204`,
@@ -310,6 +338,9 @@ class PhoneManager {
           `gsm.sim.operator.iso-country=vn`,
           `gsm.sim.state=READY`,
           `ro.telephony.default_network=13`,
+          `gsm.nitz.time=${Date.now()}`,
+          `gsm.version.ril-impl=android ${dev.brand}-ril 1.0`,
+          // Security / Build
           `ro.debuggable=0`,
           `ro.secure=1`,
           `ro.adb.secure=0`,
@@ -321,6 +352,9 @@ class PhoneManager {
           `ro.boot.flash.locked=1`,
           `ro.setupwizard.mode=OPTIONAL`,
           `ro.com.google.gmsversion=13_202301`,
+          // Google Play / SafetyNet
+          `ro.com.google.clientidbase=android-${dev.brand.toLowerCase()}`,
+          `ro.com.google.clientidbase.ms=android-${dev.brand.toLowerCase()}`,
         ];
         const sedCmd = props.map(p => {
           const [key] = p.split('=');
@@ -330,6 +364,8 @@ class PhoneManager {
         await runCmd(`docker exec ${c} sh -c "mount -o remount,rw /system 2>/dev/null; sed -i ${sedCmd} /system/build.prop && ${appendCmd}"`);
         await runCmd(`docker exec ${c} settings put secure android_id ${dev.androidId}`);
         await runCmd(`docker exec ${c} setprop net.hostname android-${dev.androidId.substring(0,8)}`);
+        // An dau vet emulator
+        await this._hideEmulatorTraces(phone);
         console.log(`${phone.name}: Da spoof device info: ${dev.brand} ${dev.model}`);
 
         // Cai Zalo bang docker exec + pm (khong can ADB)
@@ -432,6 +468,8 @@ class PhoneManager {
         await runCmd(`docker exec ${c} input keyevent 26`);
         await runCmd(`docker exec ${c} input keyevent 82`);
         await runCmd(`docker exec ${c} input keyevent 3`);
+        // An dau vet emulator lai sau restart
+        await this._hideEmulatorTraces(phone);
         await new Promise(r => setTimeout(r, 5000));
         console.log(`${phone.name}: Man hinh da san sang`);
 
@@ -634,17 +672,63 @@ class PhoneManager {
     return phone;
   }
 
+  async _hideEmulatorTraces(phone) {
+    const c = phone.containerName;
+    const dev = phone.device;
+    const isQcom = dev.hardware === 'qcom' || dev.hardware.startsWith('sm');
+    const cpuModel = isQcom ? 'Qualcomm Technologies, Inc Kryo 585' : 'ARMv8 Processor rev 4 (v8l)';
+    const cpuArch = 'aarch64';
+    // Fake /proc/cpuinfo (che CPU x86)
+    const fakeCpuInfo = [
+      `Processor\\t: ${cpuModel}`,
+      `processor\\t: 0`, `BogoMIPS\\t: 38.40`,
+      `processor\\t: 1`, `BogoMIPS\\t: 38.40`,
+      `processor\\t: 2`, `BogoMIPS\\t: 38.40`,
+      `processor\\t: 3`, `BogoMIPS\\t: 38.40`,
+      `Features\\t: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics`,
+      `CPU implementer\\t: 0x51`,
+      `CPU architecture: 8`,
+      `CPU variant\\t: 0x1`,
+      `CPU part\\t: 0x804`,
+      `CPU revision\\t: 14`,
+      `Hardware\\t: ${dev.hardware}`,
+      `Serial\\t\\t: ${dev.serial}`,
+    ].join('\\n');
+    await runCmd(`docker exec ${c} sh -c "mount -o bind /dev/null /proc/version 2>/dev/null; echo '${fakeCpuInfo}' > /data/local/tmp/cpuinfo; mount -o bind /data/local/tmp/cpuinfo /proc/cpuinfo 2>/dev/null"`);
+    // Xoa file dac trung emulator
+    await runCmd(`docker exec ${c} sh -c "rm -f /system/bin/qemu-props /system/lib/libc_malloc_debug_qemu.so /sys/qemu_trace 2>/dev/null"`);
+    await runCmd(`docker exec ${c} sh -c "rm -f /system/bin/microvirt* /system/bin/nox* /system/bin/ttVM* 2>/dev/null"`);
+    // Fake battery (gia lap pin 78%)
+    await runCmd(`docker exec ${c} sh -c "mkdir -p /data/local/tmp && echo 78 > /data/local/tmp/battery_level"`);
+    await runCmd(`docker exec ${c} dumpsys battery set level 78 2>/dev/null`);
+    await runCmd(`docker exec ${c} dumpsys battery set status 5 2>/dev/null`);
+    await runCmd(`docker exec ${c} dumpsys battery set plugged 0 2>/dev/null`);
+    // An /sys/devices/virtual (dau hieu VM)
+    await runCmd(`docker exec ${c} sh -c "chmod 000 /sys/devices/virtual/thermal 2>/dev/null"`);
+    // Spoof sensors (accelerometer, gyroscope)
+    await runCmd(`docker exec ${c} setprop debug.sensors.hal.fake 1`);
+    console.log(`${phone.name}: Da an dau vet emulator (cpuinfo, battery, sensors)`);
+  }
+
   async _hardenProxy(phone) {
     const c = phone.containerName;
     await runCmd(`docker exec ${c} setprop net.dns1 8.8.8.8`);
     await runCmd(`docker exec ${c} setprop net.dns2 8.8.4.4`);
     await runCmd(`docker exec ${c} setprop persist.sys.timezone Asia/Ho_Chi_Minh`);
+    // Tat IPv6 (chong leak IP that)
     await runCmd(`docker exec ${c} sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null`);
     await runCmd(`docker exec ${c} sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null`);
-    // Force DNS qua iptables (chong app bypass)
+    // Force DNS qua iptables (chong app bypass DNS)
+    await runCmd(`docker exec ${c} iptables -t nat -F OUTPUT 2>/dev/null`);
     await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null`);
     await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null`);
-    console.log(`${phone.name}: Hardened proxy (DNS forced, timezone, IPv6 off)`);
+    // Block WebRTC/STUN leak (che IP that qua STUN)
+    await runCmd(`docker exec ${c} iptables -A OUTPUT -p udp --dport 3478 -j DROP 2>/dev/null`);
+    await runCmd(`docker exec ${c} iptables -A OUTPUT -p udp --dport 19302 -j DROP 2>/dev/null`);
+    await runCmd(`docker exec ${c} iptables -A OUTPUT -p tcp --dport 3478 -j DROP 2>/dev/null`);
+    // Block direct connection toi STUN servers Google
+    await runCmd(`docker exec ${c} iptables -A OUTPUT -p udp --dport 19302:19309 -j DROP 2>/dev/null`);
+    console.log(`${phone.name}: Hardened proxy (DNS forced, STUN blocked, IPv6 off)`);
   }
 
   async _startProxyRelay(phone, relayPort, targetHost, targetPort, user, pass) {
