@@ -476,8 +476,25 @@ class PhoneManager {
     console.log(`${phone.name}: phone adb_keys: ${phoneKeyInfo}`);
   }
 
+  async _ensureWsScrcpy() {
+    const { stdout: running } = await runCmd(`docker inspect -f '{{.State.Running}}' ws-scrcpy 2>/dev/null`);
+    if (running === 'true') return;
+    console.log('ws-scrcpy khong chay, dang khoi dong lai...');
+    const { stdout: exists } = await runCmd(`docker inspect -f '{{.Id}}' ws-scrcpy 2>/dev/null`);
+    if (exists) {
+      await runCmd(`docker start ws-scrcpy`);
+    } else {
+      await runCmd(`docker run -d --name ws-scrcpy --restart=always -p 8000:8000 scavin/ws-scrcpy`);
+    }
+    await new Promise(r => setTimeout(r, 5000));
+    // Dam bao restart policy luon la always
+    await runCmd(`docker update --restart=always ws-scrcpy`);
+    console.log('ws-scrcpy da san sang');
+  }
+
   async _connectWsScrcpy(phone) {
     console.log(`${phone.name}: Dang ket noi ws-scrcpy...`);
+    await this._ensureWsScrcpy();
     // 1. Copy ADB key vao phone TRUOC khi restart adbd
     await this._authorizeAdbKey(phone);
     // 2. Restart adbd de doc key moi
