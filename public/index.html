@@ -396,6 +396,7 @@
           <input type="number" id="schedRest" value="10" min="1">
         </div>
         <button class="btn btn-green btn-sm" id="schedBtn" onclick="toggleSchedule()">Bat</button>
+        <span id="schedStatus" style="font-size:13px;color:var(--green);margin-left:12px;font-weight:600;"></span>
       </div>
     </div>
 
@@ -500,6 +501,7 @@
       document.getElementById('dashboardPage').style.display = 'block';
       document.getElementById('userLabel').textContent = 'Admin';
       loadPhones();
+      loadSchedule();
     }
 
     function headers() {
@@ -672,8 +674,6 @@
 
     async function toggleSchedule() {
       scheduleEnabled = !scheduleEnabled;
-      const btn = document.getElementById('schedBtn');
-
       await fetch(API + '/api/schedule', {
         method: 'PUT',
         headers: headers(),
@@ -684,9 +684,33 @@
           restMinutes: parseInt(document.getElementById('schedRest').value),
         }),
       });
+      updateSchedUI();
+    }
 
+    async function loadSchedule() {
+      try {
+        const res = await fetch(API + '/api/schedule', { headers: headers() });
+        if (!res.ok) return;
+        const data = await res.json();
+        scheduleEnabled = data.config.enabled;
+        document.getElementById('schedBatch').value = data.config.phonesPerBatch;
+        document.getElementById('schedRun').value = data.config.runMinutes;
+        document.getElementById('schedRest').value = data.config.restMinutes;
+        updateSchedUI(data.phase);
+      } catch (e) {}
+    }
+
+    function updateSchedUI(phase) {
+      const btn = document.getElementById('schedBtn');
+      const status = document.getElementById('schedStatus');
       btn.textContent = scheduleEnabled ? 'Tat' : 'Bat';
       btn.className = scheduleEnabled ? 'btn btn-red btn-sm' : 'btn btn-green btn-sm';
+      if (status) {
+        if (!scheduleEnabled) status.textContent = '';
+        else if (phase === 'running') status.textContent = 'Dang chay';
+        else if (phase === 'resting') status.textContent = 'Dang nghi...';
+        else status.textContent = 'Da bat';
+      }
     }
 
     // === MODAL ===
