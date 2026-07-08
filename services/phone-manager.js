@@ -414,13 +414,21 @@ class PhoneManager {
       }
       const { stdout } = await runCmd(`docker exec ${c} getprop sys.boot_completed`);
       if (stdout === '1') {
-        console.log(`${phone.name}: Boot xong, mo man hinh`);
-        phone.status = 'running';
-        this._saveData();
+        console.log(`${phone.name}: Boot xong, dang khoi tao man hinh...`);
+        // Bat man hinh va display
         await runCmd(`docker exec ${c} svc power stayon true`);
         await runCmd(`docker exec ${c} settings put system screen_off_timeout 2147483647`);
+        await runCmd(`docker exec ${c} wm size 1080x1920`);
+        await runCmd(`docker exec ${c} wm density 480`);
+        await runCmd(`docker exec ${c} input keyevent 26`);
+        await new Promise(r => setTimeout(r, 3000));
         await runCmd(`docker exec ${c} input keyevent 82`);
         await runCmd(`docker exec ${c} input keyevent 3`);
+        await new Promise(r => setTimeout(r, 5000));
+        console.log(`${phone.name}: Man hinh da san sang`);
+
+        phone.status = 'running';
+        this._saveData();
 
         if (phone.proxy) {
           await this.setProxy(phone.id, phone.proxy);
