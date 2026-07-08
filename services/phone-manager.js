@@ -277,11 +277,17 @@ class PhoneManager {
         binds.push(`${ZALO_SPLIT_DIR}:/data/zalo:ro`);
       }
 
+      const dev = phone.device;
       const container = await docker.createContainer({
         Image: REDROID_IMAGE,
         name: phone.containerName,
         ExposedPorts: { '5555/tcp': {} },
-        Cmd: ['androidboot.redroid_gpu_mode=guest'],
+        Cmd: [
+          'androidboot.redroid_gpu_mode=guest',
+          `androidboot.hardware=${dev.hardware}`,
+          `androidboot.serialno=${dev.serial}`,
+          `androidboot.boot_devices=${dev.hardware}`,
+        ],
         HostConfig: {
           Privileged: true,
           PortBindings: {
@@ -331,10 +337,24 @@ class PhoneManager {
 
         const dev = phone.device;
         const isQcom = dev.hardware === 'qcom' || dev.hardware.startsWith('sm');
-        const cpuAbi = 'arm64-v8a';
-        const cpuAbi2 = 'armeabi-v7a';
+        const fp = dev.fingerprint;
+        const buildDesc = `${dev.device}-user 13 TP1A.220624.014 release-keys`;
+        // Spoof ALL partitions (system, vendor, product, odm, system_ext)
+        const partitions = ['system', 'vendor', 'product', 'system_ext', 'odm', 'vendor_dlkm'];
+        const partitionProps = partitions.map(p => [
+          `ro.product.${p}.model=${dev.model}`,
+          `ro.product.${p}.brand=${dev.brand}`,
+          `ro.product.${p}.manufacturer=${dev.brand}`,
+          `ro.product.${p}.device=${dev.device}`,
+          `ro.product.${p}.name=${dev.device}`,
+        ]).flat();
+        const partitionFp = partitions.map(p =>
+          `ro.${p}.build.fingerprint=${fp}`
+        );
         const props = [
-          // Device identity
+          ...partitionProps,
+          ...partitionFp,
+          // Base properties
           `ro.product.model=${dev.model}`,
           `ro.product.brand=${dev.brand}`,
           `ro.product.manufacturer=${dev.brand}`,
@@ -342,38 +362,36 @@ class PhoneManager {
           `ro.product.board=${dev.board}`,
           `ro.product.name=${dev.device}`,
           `ro.hardware=${dev.hardware}`,
-          `ro.build.fingerprint=${dev.fingerprint}`,
-          `ro.build.display.id=${dev.fingerprint.split('/').pop() || 'OPR1.170623.027'}`,
+          `ro.hardware.chipname=${dev.hardware}`,
+          `ro.build.product=${dev.device}`,
+          `ro.build.fingerprint=${fp}`,
+          `ro.build.display.id=${fp.split('/').pop() || 'TP1A.220624.014'}`,
+          `ro.build.description=${buildDesc}`,
+          `ro.build.flavor=${dev.device}-user`,
           `ro.serialno=${dev.serial}`,
           `ro.boot.serialno=${dev.serial}`,
           `ro.boot.hardware=${dev.hardware}`,
-          `ro.hardware.chipname=${dev.hardware}`,
-          `ro.build.product=${dev.device}`,
-          // CPU/ABI spoof (che x86)
-          `ro.product.cpu.abi=${cpuAbi}`,
-          `ro.product.cpu.abilist=${cpuAbi},${cpuAbi2},armeabi`,
-          `ro.product.cpu.abilist64=${cpuAbi}`,
-          `ro.product.cpu.abilist32=${cpuAbi2},armeabi`,
-          `persist.sys.dalvik.vm.lib.2=libart.so`,
-          `ro.boot.hardware.sku=${dev.device}`,
           `ro.board.platform=${isQcom ? dev.board : dev.hardware}`,
+          `ro.boot.hardware.sku=${dev.device}`,
+          // Build / Security
+          `ro.build.type=user`,
+          `ro.build.tags=release-keys`,
+          `ro.debuggable=0`,
+          `ro.secure=1`,
+          `ro.adb.secure=0`,
+          `ro.boot.vbmeta.device_state=locked`,
+          `ro.boot.verifiedbootstate=green`,
+          `ro.boot.flash.locked=1`,
+          `ro.boot.selinux=enforcing`,
+          `ro.build.selinux=1`,
           // Anti-emulator
           `ro.kernel.qemu=0`,
           `ro.boot.qemu=0`,
           `ro.kernel.android.checkjni=0`,
-          `ro.boot.selinux=enforcing`,
-          `ro.build.selinux=1`,
-          `init.svc.qemu-props=`,
-          `init.svc.goldfish-logcat=`,
-          `init.svc.goldfish-setup=`,
           `ro.hardware.egl=${isQcom ? 'adreno' : 'mali'}`,
           `ro.hardware.vulkan=${isQcom ? 'adreno' : 'mali'}`,
+          `ro.hardware.gralloc=${isQcom ? 'adreno' : 'mali'}`,
           `ro.opengles.version=196610`,
-          // Battery spoof (gia lap pin)
-          `status.battery.level=78`,
-          `status.battery.state=5`,
-          `status.battery.level_raw=78`,
-          `status.battery.level_scale=100`,
           // SIM / Network
           `persist.sys.timezone=Asia/Ho_Chi_Minh`,
           `gsm.operator.alpha=Viettel`,
@@ -384,33 +402,34 @@ class PhoneManager {
           `gsm.sim.operator.iso-country=vn`,
           `gsm.sim.state=READY`,
           `ro.telephony.default_network=13`,
-          `gsm.nitz.time=${Date.now()}`,
           `gsm.version.ril-impl=android ${dev.brand}-ril 1.0`,
-          // Security / Build
-          `ro.debuggable=0`,
-          `ro.secure=1`,
-          `ro.adb.secure=0`,
-          `ro.build.type=user`,
-          `ro.build.tags=release-keys`,
-          `ro.build.description=${dev.device}-user 13 TP1A.220624.014 release-keys`,
-          `ro.boot.vbmeta.device_state=locked`,
-          `ro.boot.verifiedbootstate=green`,
-          `ro.boot.flash.locked=1`,
+          // Google
           `ro.setupwizard.mode=OPTIONAL`,
           `ro.com.google.gmsversion=13_202301`,
-          // Google Play / SafetyNet
           `ro.com.google.clientidbase=android-${dev.brand.toLowerCase()}`,
-          `ro.com.google.clientidbase.ms=android-${dev.brand.toLowerCase()}`,
+        ];
+        // Ghi vao TAT CA build.prop files
+        const propFiles = [
+          '/system/build.prop',
+          '/vendor/build.prop',
+          '/product/build.prop',
+          '/system_ext/build.prop',
+          '/odm/build.prop',
         ];
         const sedCmd = props.map(p => {
           const [key] = p.split('=');
           return `-e '/^${key}=/d'`;
         }).join(' ');
-        const appendCmd = props.map(p => `echo '${p}' >> /system/build.prop`).join(' && ');
-        await runCmd(`docker exec ${c} sh -c "mount -o remount,rw /system 2>/dev/null; sed -i ${sedCmd} /system/build.prop && ${appendCmd}"`);
+        const appendCmd = props.map(p => `echo '${p}'`).join(' && ');
+        for (const pf of propFiles) {
+          const dir = pf.substring(0, pf.lastIndexOf('/'));
+          await runCmd(`docker exec ${c} sh -c "mount -o remount,rw ${dir} 2>/dev/null; touch ${pf} 2>/dev/null; sed -i ${sedCmd} ${pf} 2>/dev/null; (${appendCmd}) >> ${pf} 2>/dev/null"`);
+        }
+        // Default.prop
+        await runCmd(`docker exec ${c} sh -c "sed -i ${sedCmd} /default.prop 2>/dev/null; (${appendCmd}) >> /default.prop 2>/dev/null"`);
         await runCmd(`docker exec ${c} settings put secure android_id ${dev.androidId}`);
         await runCmd(`docker exec ${c} setprop net.hostname android-${dev.androidId.substring(0,8)}`);
-        console.log(`${phone.name}: Da spoof device info: ${dev.brand} ${dev.model}`);
+        console.log(`${phone.name}: Da spoof ALL partitions: ${dev.brand} ${dev.model}`);
 
         // Cai Zalo bang docker exec + pm (khong can ADB)
         const { stdout: hasZalo } = await runCmd(`docker exec ${c} ls /data/zalo/ 2>/dev/null`);
