@@ -388,7 +388,9 @@ class PhoneManager {
         await container.start();
         phone.status = 'running';
         phone.startedAt = new Date().toISOString();
-        await runCmd(`adb connect localhost:${phone.port}`);
+        this._saveData();
+        console.log(`${phone.name}: Da start container, doi boot...`);
+        this._waitBootAndResume(phone);
       } catch (err) {
         console.error(`Loi start ${phone.name}:`, err.message);
       }
@@ -398,6 +400,53 @@ class PhoneManager {
 
     this._saveData();
     return phone;
+  }
+
+  async _waitBootAndResume(phone) {
+    const c = phone.containerName;
+    let attempt = 0;
+    const check = async () => {
+      attempt++;
+      if (attempt > 24) {
+        console.log(`${phone.name}: timeout doi boot (4 phut)`);
+        return;
+      }
+      const { stdout } = await runCmd(`docker exec ${c} getprop sys.boot_completed`);
+      if (stdout === '1') {
+        console.log(`${phone.name}: Boot xong, mo man hinh`);
+        await runCmd(`docker exec ${c} svc power stayon true`);
+        await runCmd(`docker exec ${c} settings put system screen_off_timeout 2147483647`);
+        await runCmd(`docker exec ${c} input keyevent 82`);
+        await runCmd(`docker exec ${c} input keyevent 3`);
+
+        if (phone.proxy) {
+          await this.setProxy(phone.id, phone.proxy);
+        }
+
+        await runCmd(`docker restart ws-scrcpy`);
+        console.log(`${phone.name}: Da restart ws-scrcpy`);
+
+        setTimeout(async () => {
+          await this.launchZalo(phone.id);
+        }, 5000);
+      } else {
+        setTimeout(check, 10000);
+      }
+    };
+    setTimeout(check, 15000);
+  }
+
+  async launchZalo(id) {
+    const phone = this.phones.get(id);
+    if (!phone || phone.status !== 'running') return;
+    const c = phone.containerName;
+    const { stdout } = await runCmd(`docker exec ${c} pm list packages com.zing.zalo 2>/dev/null`);
+    if (stdout && stdout.includes('com.zing.zalo')) {
+      await runCmd(`docker exec ${c} am start -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
+      console.log(`${phone.name}: Da tu dong mo Zalo`);
+    } else {
+      console.log(`${phone.name}: Zalo chua cai, bo qua launch`);
+    }
   }
 
   async stopPhone(id) {
@@ -410,7 +459,6 @@ class PhoneManager {
         await container.stop();
         phone.status = 'stopped';
         phone.stoppedAt = new Date().toISOString();
-        await runCmd(`adb disconnect localhost:${phone.port}`);
       } catch (err) {
         console.error(`Loi stop ${phone.name}:`, err.message);
       }
