@@ -224,6 +224,12 @@ class PhoneManager {
 
   async _createContainer(phone) {
     try {
+      const binds = ['/dev/binderfs:/dev/binderfs'];
+      const ZALO_SPLIT_DIR = '/root/zalo_split';
+      if (fs.existsSync(ZALO_SPLIT_DIR)) {
+        binds.push(`${ZALO_SPLIT_DIR}:/data/zalo:ro`);
+      }
+
       const container = await docker.createContainer({
         Image: REDROID_IMAGE,
         name: phone.containerName,
@@ -234,7 +240,7 @@ class PhoneManager {
           PortBindings: {
             '5555/tcp': [{ HostPort: String(phone.port) }]
           },
-          Binds: ['/dev/binderfs:/dev/binderfs']
+          Binds: binds,
         }
       });
 
@@ -255,37 +261,28 @@ class PhoneManager {
   }
 
   async _waitBootAndSetup(phone) {
-    const maxAttempts = 18;
+    const c = phone.containerName;
+    const maxAttempts = 24;
     let attempt = 0;
 
     const check = async () => {
       attempt++;
       if (attempt > maxAttempts) {
-        console.log(`${phone.name}: timeout cho boot`);
+        console.log(`${phone.name}: timeout cho boot (4 phut)`);
         return;
       }
 
-      // Restart ws-scrcpy de ADB scan lai tat ca emulator ports
-      await runCmd(`adb kill-server 2>/dev/null`);
-      await runCmd(`docker restart ws-scrcpy`);
-      await new Promise(r => setTimeout(r, 5000));
-      const scrcpyAdb = `docker exec ws-scrcpy adb`;
-      const emulatorId = `emulator-${phone.port - 1}`;
-      await runCmd(`${scrcpyAdb} devices`);
-      await new Promise(r => setTimeout(r, 2000));
-      const { stdout } = await runCmd(`${scrcpyAdb} -s ${emulatorId} shell getprop sys.boot_completed`);
+      const { stdout } = await runCmd(`docker exec ${c} getprop sys.boot_completed`);
 
       if (stdout === '1') {
         console.log(`${phone.name}: Android da boot xong`);
-        const adb = `${scrcpyAdb} -s ${emulatorId}`;
-        await runCmd(`${adb} shell svc power stayon true`);
-        await runCmd(`${adb} shell settings put system screen_off_timeout 2147483647`);
-        await runCmd(`${adb} shell input keyevent 26`);
-        console.log(`${phone.name}: Da bat man hinh mac dinh`);
-        console.log(`${phone.name}: Da ket noi ws-scrcpy`);
+
+        await runCmd(`docker exec ${c} svc power stayon true`);
+        await runCmd(`docker exec ${c} settings put system screen_off_timeout 2147483647`);
+        await runCmd(`docker exec ${c} input keyevent 82`);
+        console.log(`${phone.name}: Da bat man hinh`);
 
         const dev = phone.device;
-        const c = phone.containerName;
         const props = [
           `ro.product.model=${dev.model}`,
           `ro.product.brand=${dev.brand}`,
@@ -333,31 +330,37 @@ class PhoneManager {
         await runCmd(`docker exec ${c} setprop net.hostname android-${dev.androidId.substring(0,8)}`);
         console.log(`${phone.name}: Da spoof device info: ${dev.brand} ${dev.model}`);
 
-        const ZALO_SPLIT_DIR = '/root/zalo_split';
-        if (fs.existsSync(ZALO_SPLIT_DIR)) {
-          const apks = fs.readdirSync(ZALO_SPLIT_DIR).filter(f => f.endsWith('.apk')).map(f => `${ZALO_SPLIT_DIR}/${f}`).join(' ');
-          console.log(`${phone.name}: Dang cai Zalo (split APK)...`);
-          const { err } = await runCmd(`${adb} install-multiple -r ${apks}`);
+        // Cai Zalo bang docker exec + pm (khong can ADB)
+        const { stdout: hasZalo } = await runCmd(`docker exec ${c} ls /data/zalo/ 2>/dev/null`);
+        if (hasZalo) {
+          console.log(`${phone.name}: Dang cai Zalo (split APK qua pm)...`);
+          const installScript = `
+            cd /data/zalo && \
+            total=0 && \
+            for f in *.apk; do s=\$(wc -c < "\$f"); total=\$((total + s)); done && \
+            session=\$(pm install-create -S \$total 2>&1 | grep -oE '[0-9]+') && \
+            i=0 && \
+            for f in *.apk; do \
+              s=\$(wc -c < "\$f"); \
+              pm install-write -S \$s \$session \$i "/data/zalo/\$f"; \
+              i=\$((i + 1)); \
+            done && \
+            pm install-commit \$session
+          `;
+          const { err } = await runCmd(`docker exec ${c} sh -c '${installScript.replace(/'/g, "'\\''")}'`);
           if (!err) {
             phone.zaloInstalled = true;
             this._saveData();
             console.log(`${phone.name}: Zalo da cai xong`);
           } else {
-            console.log(`${phone.name}: Loi cai Zalo split, thu single APK...`);
-            if (fs.existsSync(ZALO_APK)) {
-              const r = await runCmd(`${adb} install -r ${ZALO_APK}`);
-              if (!r.err) { phone.zaloInstalled = true; this._saveData(); }
-            }
-          }
-        } else if (fs.existsSync(ZALO_APK)) {
-          console.log(`${phone.name}: Dang cai Zalo...`);
-          const { err } = await runCmd(`${adb} install -r ${ZALO_APK}`);
-          if (!err) {
-            phone.zaloInstalled = true;
-            this._saveData();
-            console.log(`${phone.name}: Zalo da cai xong`);
+            console.log(`${phone.name}: Loi cai Zalo qua pm`);
           }
         }
+
+        // Restart ws-scrcpy de nhan dien phone moi
+        await runCmd(`docker restart ws-scrcpy`);
+        console.log(`${phone.name}: Da restart ws-scrcpy`);
+
       } else {
         setTimeout(check, 10000);
       }
