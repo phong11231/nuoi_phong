@@ -618,7 +618,6 @@ class PhoneManager {
     if (stdout && stdout.includes('com.zing.zalo')) {
       await runCmd(`docker exec ${c} am start -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
       console.log(`${phone.name}: Da tu dong mo Zalo`);
-      this._startZaloRestart(phone);
     } else {
       console.log(`${phone.name}: Zalo chua cai, bo qua launch`);
     }
@@ -634,28 +633,18 @@ class PhoneManager {
       this._zaloTimers[phone.id] = setTimeout(async () => {
         if (!phone || phone.status !== 'running') return;
         const c = phone.containerName;
-        console.log(`${phone.name}: Dang dong Zalo (sau ${mins} phut)...`);
-        // Bam nut vuong (recent apps)
-        await runCmd(`docker exec ${c} input keyevent 187`);
-        await new Promise(r => setTimeout(r, 2000));
-        // Luot len de dong tab Zalo
-        await runCmd(`docker exec ${c} input swipe 360 900 360 100 500`);
-        await new Promise(r => setTimeout(r, 1500));
-        // Force stop backup
+        console.log(`${phone.name}: Dang restart Zalo (sau ${mins} phut)...`);
         await runCmd(`docker exec ${c} am force-stop com.zing.zalo`);
-        // Bam home
-        await runCmd(`docker exec ${c} input keyevent 3`);
         await new Promise(r => setTimeout(r, 3000));
-        // Mo lai Zalo (dung monkey thay vi am start)
-        await runCmd(`docker exec ${c} monkey -p com.zing.zalo -c android.intent.category.LAUNCHER 1 2>/dev/null`);
-        await new Promise(r => setTimeout(r, 3000));
-        // Verify Zalo da mo
+        await runCmd(`docker exec ${c} am start -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
+        await new Promise(r => setTimeout(r, 5000));
         const { stdout: zaloRunning } = await runCmd(`docker exec ${c} pidof com.zing.zalo 2>/dev/null`);
-        if (!zaloRunning) {
-          console.log(`${phone.name}: Zalo chua mo, thu lai...`);
-          await runCmd(`docker exec ${c} am start -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
+        if (zaloRunning) {
+          console.log(`${phone.name}: Zalo da mo lai OK`);
+        } else {
+          console.log(`${phone.name}: Zalo chua mo, thu lan 2...`);
+          await runCmd(`docker exec ${c} am start -W -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
         }
-        console.log(`${phone.name}: Da mo lai Zalo`);
         scheduleNext();
       }, delay);
     };
