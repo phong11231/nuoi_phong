@@ -618,14 +618,52 @@ class PhoneManager {
     if (stdout && stdout.includes('com.zing.zalo')) {
       await runCmd(`docker exec ${c} am start -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
       console.log(`${phone.name}: Da tu dong mo Zalo`);
+      this._startZaloRestart(phone);
     } else {
       console.log(`${phone.name}: Zalo chua cai, bo qua launch`);
+    }
+  }
+
+  _startZaloRestart(phone) {
+    if (!this._zaloTimers) this._zaloTimers = {};
+    if (this._zaloTimers[phone.id]) clearTimeout(this._zaloTimers[phone.id]);
+
+    const scheduleNext = () => {
+      const delay = (1) * 60 * 1000; // TODO: doi lai (15 + Math.random() * 15) * 60 * 1000
+      const mins = Math.round(delay / 60000);
+      this._zaloTimers[phone.id] = setTimeout(async () => {
+        if (!phone || phone.status !== 'running') return;
+        const c = phone.containerName;
+        console.log(`${phone.name}: Dang dong Zalo (sau ${mins} phut)...`);
+        // Bam nut vuong (recent apps)
+        await runCmd(`docker exec ${c} input keyevent 187`);
+        await new Promise(r => setTimeout(r, 1500));
+        // Luot len de dong tab Zalo
+        await runCmd(`docker exec ${c} input swipe 540 1000 540 200 300`);
+        await new Promise(r => setTimeout(r, 2000));
+        // Bam home
+        await runCmd(`docker exec ${c} input keyevent 3`);
+        await new Promise(r => setTimeout(r, 1500));
+        // Mo lai Zalo
+        await runCmd(`docker exec ${c} am start -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
+        console.log(`${phone.name}: Da mo lai Zalo`);
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
+  }
+
+  _stopZaloRestart(phoneId) {
+    if (this._zaloTimers && this._zaloTimers[phoneId]) {
+      clearTimeout(this._zaloTimers[phoneId]);
+      delete this._zaloTimers[phoneId];
     }
   }
 
   async stopPhone(id) {
     const phone = this.phones.get(id);
     if (!phone) return null;
+    this._stopZaloRestart(id);
 
     if (docker && phone.containerId) {
       try {
