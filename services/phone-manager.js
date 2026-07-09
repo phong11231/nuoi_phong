@@ -749,26 +749,31 @@ class PhoneManager {
     await runCmd(`docker exec ${c} sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null`);
     await runCmd(`docker exec ${c} sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null`);
 
-    // Xoa iptables cu
+    // Lay IP cua container
+    const { stdout: containerIp } = await runCmd(`docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${c}`);
+    if (!containerIp) {
+      console.log(`${phone.name}: Khong lay duoc container IP`);
+      return;
+    }
+
+    // Xoa rules cu cua container nay tren HOST
+    await runCmd(`iptables -t nat -S PREROUTING 2>/dev/null | grep "${containerIp}" | while read rule; do iptables -t nat $(echo "$rule" | sed 's/-A/-D/'); done 2>/dev/null`);
+
+    // Redirect TOAN BO TCP tu container qua redsocks tren HOST (PREROUTING)
+    // Skip local/private networks
+    await runCmd(`iptables -t nat -A PREROUTING -s ${containerIp} -d 172.17.0.0/16 -j RETURN 2>/dev/null`);
+    await runCmd(`iptables -t nat -A PREROUTING -s ${containerIp} -d 10.0.0.0/8 -j RETURN 2>/dev/null`);
+    await runCmd(`iptables -t nat -A PREROUTING -s ${containerIp} -d 127.0.0.0/8 -j RETURN 2>/dev/null`);
+    await runCmd(`iptables -t nat -A PREROUTING -s ${containerIp} -p tcp -j REDIRECT --to-ports ${redsocksPort} 2>/dev/null`);
+
+    // DNS + STUN block trong container
     await runCmd(`docker exec ${c} iptables -t nat -F OUTPUT 2>/dev/null`);
-    await runCmd(`docker exec ${c} iptables -F OUTPUT 2>/dev/null`);
-
-    // Redirect TOAN BO TCP qua redsocks (transparent proxy)
-    // Khong redirect traffic den chinh redsocks (tranh loop)
-    await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -d 172.17.0.1 -j RETURN 2>/dev/null`);
-    await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -d 127.0.0.0/8 -j RETURN 2>/dev/null`);
-    await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -d 10.0.0.0/8 -j RETURN 2>/dev/null`);
-    await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -p tcp -j DNAT --to-destination 172.17.0.1:${redsocksPort} 2>/dev/null`);
-
-    // Force DNS
     await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null`);
     await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null`);
-
-    // Block STUN/WebRTC leak
     await runCmd(`docker exec ${c} iptables -A OUTPUT -p udp --dport 3478 -j DROP 2>/dev/null`);
     await runCmd(`docker exec ${c} iptables -A OUTPUT -p udp --dport 19302:19309 -j DROP 2>/dev/null`);
 
-    console.log(`${phone.name}: Hardened proxy - ALL TCP qua redsocks:${redsocksPort}, STUN blocked, IPv6 off`);
+    console.log(`${phone.name}: Hardened - ALL TCP ${containerIp} -> redsocks:${redsocksPort}, STUN blocked, IPv6 off`);
   }
 
   async _ensureRedsocks() {
@@ -802,7 +807,7 @@ class PhoneManager {
     const config = `
 base { log_debug = off; log_info = off; daemon = off; redirector = iptables; }
 redsocks {
-  local_ip = 172.17.0.1;
+  local_ip = 0.0.0.0;
   local_port = ${redsocksPort};
   ip = ${targetHost};
   port = ${targetPort};
@@ -871,9 +876,13 @@ redsocks {
 
     if (phone.status === 'running') {
       await runCmd(`docker exec ${phone.containerName} settings put global http_proxy :0`);
-      // Xoa iptables redirect
       await runCmd(`docker exec ${phone.containerName} iptables -t nat -F OUTPUT 2>/dev/null`);
       await runCmd(`docker exec ${phone.containerName} iptables -F OUTPUT 2>/dev/null`);
+      // Xoa host iptables rules cho container nay
+      const { stdout: containerIp } = await runCmd(`docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${phone.containerName}`);
+      if (containerIp) {
+        await runCmd(`iptables -t nat -S PREROUTING 2>/dev/null | grep "${containerIp}" | while read rule; do iptables -t nat $(echo "$rule" | sed 's/-A/-D/'); done 2>/dev/null`);
+      }
     }
 
     if (this._relays && this._relays[id]) {
