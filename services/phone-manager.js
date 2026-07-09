@@ -764,7 +764,7 @@ class PhoneManager {
     await runCmd(`iptables -t nat -A PREROUTING -s ${containerIp} -d 172.17.0.0/16 -j RETURN 2>/dev/null`);
     await runCmd(`iptables -t nat -A PREROUTING -s ${containerIp} -d 10.0.0.0/8 -j RETURN 2>/dev/null`);
     await runCmd(`iptables -t nat -A PREROUTING -s ${containerIp} -d 127.0.0.0/8 -j RETURN 2>/dev/null`);
-    await runCmd(`iptables -t nat -A PREROUTING -s ${containerIp} -p tcp -j REDIRECT --to-ports ${redsocksPort} 2>/dev/null`);
+    await runCmd(`iptables -t nat -A PREROUTING -s ${containerIp} -p tcp -j DNAT --to-destination 172.17.0.1:${redsocksPort}`);
 
     // DNS + STUN block trong container
     await runCmd(`docker exec ${c} iptables -t nat -F OUTPUT 2>/dev/null`);
