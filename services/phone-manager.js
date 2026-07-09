@@ -918,6 +918,13 @@ class PhoneManager {
           await runCmd(`fuser -k ${redsocksPort}/tcp 2>/dev/null`);
           await new Promise(r => setTimeout(r, 500));
           proc = startRedsocks();
+          await new Promise(r => setTimeout(r, 2000));
+          // Restart Zalo de lay lai mang
+          const c = phone.containerName;
+          await runCmd(`docker exec ${c} am force-stop com.zing.zalo`);
+          await new Promise(r => setTimeout(r, 2000));
+          await runCmd(`docker exec ${c} am start -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
+          console.log(`${phone.name}: Da restart Zalo sau khi redsocks phuc hoi`);
         }
       } catch (e) {}
     }, 5000);
