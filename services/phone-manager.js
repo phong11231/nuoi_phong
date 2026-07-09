@@ -196,10 +196,8 @@ class PhoneManager {
         const parts = phone.proxy.split(':');
         const proxyUser = parts[2] || '';
         const proxyPass = parts[3] || '';
-        if (proxyUser && proxyPass) {
-          this._startProxyRelay(phone, phone.relayPort, parts[0], parts[1], proxyUser, proxyPass);
-          console.log(`Phuc hoi relay cho ${phone.name} tren port ${phone.relayPort}`);
-        }
+        this._startProxyRelay(phone, phone.relayPort, parts[0], parts[1], proxyUser, proxyPass);
+        console.log(`Phuc hoi redsocks+relay cho ${phone.name} tren port ${phone.relayPort}`);
       }
     }
   }
@@ -687,14 +685,13 @@ class PhoneManager {
     const proxyUser = parts[2] || '';
     const proxyPass = parts[3] || '';
 
-    if (proxyUser) {
-      const relayPort = 20000 + phone.port;
-      await this._startProxyRelay(phone, relayPort, proxyHost, proxyPort, proxyUser, proxyPass);
-      await runCmd(`docker exec ${phone.containerName} settings put global http_proxy 172.17.0.1:${relayPort}`);
-      phone.relayPort = relayPort;
-    } else {
-      await runCmd(`docker exec ${phone.containerName} settings put global http_proxy ${proxyHost}:${proxyPort}`);
-    }
+    const relayPort = 20000 + phone.port;
+    phone.relayPort = relayPort;
+    await this._startProxyRelay(phone, relayPort, proxyHost, proxyPort, proxyUser, proxyPass);
+
+    // Set http_proxy lam backup cho apps co dung
+    const httpRelayPort = relayPort + 5000;
+    await runCmd(`docker exec ${phone.containerName} settings put global http_proxy 172.17.0.1:${httpRelayPort}`);
 
     await this._hardenProxy(phone);
 
@@ -743,78 +740,129 @@ class PhoneManager {
 
   async _hardenProxy(phone) {
     const c = phone.containerName;
+    const redsocksPort = phone.relayPort;
+
     await runCmd(`docker exec ${c} setprop net.dns1 8.8.8.8`);
     await runCmd(`docker exec ${c} setprop net.dns2 8.8.4.4`);
     await runCmd(`docker exec ${c} setprop persist.sys.timezone Asia/Ho_Chi_Minh`);
-    // Tat IPv6 (chong leak IP that)
+    // Tat IPv6
     await runCmd(`docker exec ${c} sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null`);
     await runCmd(`docker exec ${c} sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null`);
-    // Force DNS qua iptables (chong app bypass DNS)
+
+    // Xoa iptables cu
     await runCmd(`docker exec ${c} iptables -t nat -F OUTPUT 2>/dev/null`);
+    await runCmd(`docker exec ${c} iptables -F OUTPUT 2>/dev/null`);
+
+    // Redirect TOAN BO TCP qua redsocks (transparent proxy)
+    // Khong redirect traffic den chinh redsocks (tranh loop)
+    await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -d 172.17.0.1 -j RETURN 2>/dev/null`);
+    await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -d 127.0.0.0/8 -j RETURN 2>/dev/null`);
+    await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -d 10.0.0.0/8 -j RETURN 2>/dev/null`);
+    await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -p tcp -j DNAT --to-destination 172.17.0.1:${redsocksPort} 2>/dev/null`);
+
+    // Force DNS
     await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -p udp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null`);
     await runCmd(`docker exec ${c} iptables -t nat -A OUTPUT -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8:53 2>/dev/null`);
-    // Block WebRTC/STUN leak (che IP that qua STUN)
+
+    // Block STUN/WebRTC leak
     await runCmd(`docker exec ${c} iptables -A OUTPUT -p udp --dport 3478 -j DROP 2>/dev/null`);
-    await runCmd(`docker exec ${c} iptables -A OUTPUT -p udp --dport 19302 -j DROP 2>/dev/null`);
-    await runCmd(`docker exec ${c} iptables -A OUTPUT -p tcp --dport 3478 -j DROP 2>/dev/null`);
-    // Block direct connection toi STUN servers Google
     await runCmd(`docker exec ${c} iptables -A OUTPUT -p udp --dport 19302:19309 -j DROP 2>/dev/null`);
-    console.log(`${phone.name}: Hardened proxy (DNS forced, STUN blocked, IPv6 off)`);
+
+    console.log(`${phone.name}: Hardened proxy - ALL TCP qua redsocks:${redsocksPort}, STUN blocked, IPv6 off`);
+  }
+
+  async _ensureRedsocks() {
+    if (this._redsocksChecked) return;
+    const { stdout } = await runCmd('which redsocks 2>/dev/null');
+    if (!stdout) {
+      console.log('Dang cai redsocks...');
+      await runCmd('apt-get update -qq && apt-get install -y -qq redsocks 2>/dev/null');
+      await runCmd('systemctl stop redsocks 2>/dev/null; systemctl disable redsocks 2>/dev/null');
+    }
+    this._redsocksChecked = true;
   }
 
   async _startProxyRelay(phone, relayPort, targetHost, targetPort, user, pass) {
     if (!this._relays) this._relays = {};
     if (this._relays[phone.id]) {
-      try { this._relays[phone.id].close(); } catch (e) {}
+      try {
+        if (this._relays[phone.id].process) this._relays[phone.id].process.kill();
+        if (this._relays[phone.id].server) this._relays[phone.id].server.close();
+      } catch (e) {}
     }
 
+    await this._ensureRedsocks();
+
+    const redsocksPort = relayPort;
+    const configPath = `/tmp/redsocks_${phone.containerName}.conf`;
+    const proxyType = user ? 'http-connect' : 'http-connect';
+    const loginLine = user ? `login = "${user}";` : '';
+    const passLine = pass ? `password = "${pass}";` : '';
+
+    const config = `
+base { log_debug = off; log_info = off; daemon = off; redirector = iptables; }
+redsocks {
+  local_ip = 172.17.0.1;
+  local_port = ${redsocksPort};
+  ip = ${targetHost};
+  port = ${targetPort};
+  type = ${proxyType};
+  ${loginLine}
+  ${passLine}
+}`;
+
+    const { writeFileSync } = require('fs');
+    writeFileSync(configPath, config);
+
+    const { spawn } = require('child_process');
+    const proc = spawn('redsocks', ['-c', configPath], { stdio: 'ignore', detached: true });
+    proc.unref();
+    proc.on('error', (err) => console.error(`Loi redsocks ${phone.name}:`, err.message));
+
+    await new Promise(r => setTimeout(r, 1000));
+    console.log(`Redsocks cho ${phone.name} tren port ${redsocksPort} -> ${targetHost}:${targetPort}`);
+
+    // HTTP relay van can cho http_proxy setting (backup)
     const http = require('http');
     const net = require('net');
-    const authHeader = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
+    const httpRelayPort = redsocksPort + 5000;
+    const authHeader = user ? 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64') : null;
 
     const server = http.createServer((req, res) => {
+      const headers = { ...req.headers };
+      if (authHeader) headers['Proxy-Authorization'] = authHeader;
       const upstream = http.request({
-        host: targetHost,
-        port: parseInt(targetPort),
-        method: req.method,
-        path: req.url,
-        headers: { ...req.headers, 'Proxy-Authorization': authHeader },
-      }, (upRes) => {
-        res.writeHead(upRes.statusCode, upRes.headers);
-        upRes.pipe(res);
-      });
+        host: targetHost, port: parseInt(targetPort),
+        method: req.method, path: req.url, headers,
+      }, (upRes) => { res.writeHead(upRes.statusCode, upRes.headers); upRes.pipe(res); });
       upstream.on('error', () => res.destroy());
       req.pipe(upstream);
     });
 
     server.on('connect', (req, clientSocket, head) => {
       const proxySocket = net.createConnection(parseInt(targetPort), targetHost, () => {
-        proxySocket.write(`CONNECT ${req.url} HTTP/1.1\r\nHost: ${req.url}\r\nProxy-Authorization: ${authHeader}\r\n\r\n`);
+        let connectReq = `CONNECT ${req.url} HTTP/1.1\r\nHost: ${req.url}\r\n`;
+        if (authHeader) connectReq += `Proxy-Authorization: ${authHeader}\r\n`;
+        connectReq += '\r\n';
+        proxySocket.write(connectReq);
       });
       proxySocket.once('data', (chunk) => {
         if (chunk.toString().includes('200')) {
           clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
           if (head && head.length) proxySocket.write(head);
-          proxySocket.pipe(clientSocket);
-          clientSocket.pipe(proxySocket);
-        } else {
-          clientSocket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
-          clientSocket.destroy();
-          proxySocket.destroy();
-        }
+          proxySocket.pipe(clientSocket); clientSocket.pipe(proxySocket);
+        } else { clientSocket.destroy(); proxySocket.destroy(); }
       });
       proxySocket.on('error', () => clientSocket.destroy());
       clientSocket.on('error', () => proxySocket.destroy());
     });
 
-    server.listen(relayPort, '172.17.0.1', () => {
-      console.log(`Proxy relay cho ${phone.name} tren port ${relayPort} (chi Docker)`);
+    server.listen(httpRelayPort, '172.17.0.1', () => {
+      console.log(`HTTP relay cho ${phone.name} tren port ${httpRelayPort}`);
     });
-    server.on('error', (err) => {
-      console.error(`Loi proxy relay ${phone.name}:`, err.message);
-    });
+    server.on('error', () => {});
 
-    this._relays[phone.id] = server;
+    this._relays[phone.id] = { process: proc, server, configPath };
   }
 
   async removeProxy(id) {
@@ -823,10 +871,19 @@ class PhoneManager {
 
     if (phone.status === 'running') {
       await runCmd(`docker exec ${phone.containerName} settings put global http_proxy :0`);
+      // Xoa iptables redirect
+      await runCmd(`docker exec ${phone.containerName} iptables -t nat -F OUTPUT 2>/dev/null`);
+      await runCmd(`docker exec ${phone.containerName} iptables -F OUTPUT 2>/dev/null`);
     }
 
     if (this._relays && this._relays[id]) {
-      try { this._relays[id].close(); } catch (e) {}
+      try {
+        if (this._relays[id].process) this._relays[id].process.kill();
+        if (this._relays[id].server) this._relays[id].server.close();
+        if (this._relays[id].configPath) {
+          try { require('fs').unlinkSync(this._relays[id].configPath); } catch (e) {}
+        }
+      } catch (e) {}
       delete this._relays[id];
     }
 
