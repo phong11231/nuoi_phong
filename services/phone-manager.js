@@ -618,6 +618,7 @@ class PhoneManager {
     if (stdout && stdout.includes('com.zing.zalo')) {
       await runCmd(`docker exec ${c} am start -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
       console.log(`${phone.name}: Da tu dong mo Zalo`);
+      this._startZaloRestart(phone);
     } else {
       console.log(`${phone.name}: Zalo chua cai, bo qua launch`);
     }
