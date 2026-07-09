@@ -277,6 +277,7 @@ class PhoneManager {
         binds.push(`${ZALO_SPLIT_DIR}:/data/zalo:ro`);
       }
 
+      const dev = phone.device;
       const container = await docker.createContainer({
         Image: REDROID_IMAGE,
         name: phone.containerName,
@@ -291,12 +292,55 @@ class PhoneManager {
         }
       });
 
-      await container.start();
       phone.containerId = container.id;
+      this._saveData();
+
+      // Sua build.prop TRUOC khi start -> ro.* co gia tri dung ngay tu boot
+      const c = phone.containerName;
+      const props = [
+        `ro.product.model=${dev.model}`,
+        `ro.product.brand=${dev.brand}`,
+        `ro.product.manufacturer=${dev.brand}`,
+        `ro.product.device=${dev.device}`,
+        `ro.product.board=${dev.board}`,
+        `ro.product.name=${dev.device}`,
+        `ro.hardware=${dev.hardware}`,
+        `ro.build.fingerprint=${dev.fingerprint}`,
+        `ro.build.display.id=${dev.fingerprint.split('/').pop() || 'OPR1.170623.027'}`,
+        `ro.serialno=${dev.serial}`,
+        `ro.boot.serialno=${dev.serial}`,
+        `ro.kernel.qemu=0`,
+        `ro.boot.qemu=0`,
+        `ro.boot.hardware=${dev.hardware}`,
+        `ro.hardware.chipname=${dev.hardware}`,
+        `ro.build.product=${dev.device}`,
+        `ro.debuggable=0`,
+        `ro.secure=1`,
+        `ro.adb.secure=0`,
+        `ro.build.type=user`,
+        `ro.build.tags=release-keys`,
+        `ro.build.description=${dev.device}-user 13 TP1A.220624.014 release-keys`,
+        `ro.boot.vbmeta.device_state=locked`,
+        `ro.boot.verifiedbootstate=green`,
+        `ro.boot.flash.locked=1`,
+      ];
+      // Copy build.prop ra, sua, copy lai (docker cp hoat dong tren container chua start)
+      await runCmd(`docker cp ${c}:/system/build.prop /tmp/build_${c}.prop`);
+      const sedCmd = props.map(p => {
+        const [key] = p.split('=');
+        return `-e '/^${key}=/d'`;
+      }).join(' ');
+      const appendLines = props.map(p => `echo '${p}' >> /tmp/build_${c}.prop`).join(' && ');
+      await runCmd(`sed -i ${sedCmd} /tmp/build_${c}.prop && ${appendLines}`);
+      await runCmd(`docker cp /tmp/build_${c}.prop ${c}:/system/build.prop`);
+      await runCmd(`rm -f /tmp/build_${c}.prop`);
+      console.log(`${phone.name}: Da sua build.prop truoc boot: ${dev.brand} ${dev.model}`);
+
+      await container.start();
       phone.status = 'running';
       phone.startedAt = new Date().toISOString();
       this._saveData();
-      console.log(`Container ${phone.containerName} da tao, port ${phone.port}`);
+      console.log(`Container ${c} da tao, port ${phone.port}`);
 
       this._waitBootAndSetup(phone);
     } catch (err) {
@@ -330,52 +374,23 @@ class PhoneManager {
         console.log(`${phone.name}: Da bat man hinh`);
 
         const dev = phone.device;
-        const props = [
-          `ro.product.model=${dev.model}`,
-          `ro.product.brand=${dev.brand}`,
-          `ro.product.manufacturer=${dev.brand}`,
-          `ro.product.device=${dev.device}`,
-          `ro.product.board=${dev.board}`,
-          `ro.product.name=${dev.device}`,
-          `ro.hardware=${dev.hardware}`,
-          `ro.build.fingerprint=${dev.fingerprint}`,
-          `ro.build.display.id=${dev.fingerprint.split('/').pop() || 'OPR1.170623.027'}`,
-          `ro.serialno=${dev.serial}`,
-          `ro.boot.serialno=${dev.serial}`,
-          `ro.kernel.qemu=0`,
-          `ro.boot.qemu=0`,
-          `ro.boot.hardware=${dev.hardware}`,
-          `ro.hardware.chipname=${dev.hardware}`,
-          `ro.build.product=${dev.device}`,
-          `persist.sys.timezone=Asia/Ho_Chi_Minh`,
-          `gsm.operator.alpha=Viettel`,
-          `gsm.operator.numeric=45204`,
-          `gsm.operator.iso-country=vn`,
-          `gsm.sim.operator.alpha=Viettel`,
-          `gsm.sim.operator.numeric=45204`,
-          `gsm.sim.operator.iso-country=vn`,
-          `gsm.sim.state=READY`,
-          `ro.telephony.default_network=13`,
-          `ro.debuggable=0`,
-          `ro.secure=1`,
-          `ro.adb.secure=0`,
-          `ro.build.type=user`,
-          `ro.build.tags=release-keys`,
-          `ro.build.description=${dev.device}-user 13 TP1A.220624.014 release-keys`,
-          `ro.boot.vbmeta.device_state=locked`,
-          `ro.boot.verifiedbootstate=green`,
-          `ro.boot.flash.locked=1`,
-          `ro.setupwizard.mode=OPTIONAL`,
-          `ro.com.google.gmsversion=13_202301`,
+        // ro.* props da duoc truyen qua Docker Cmd luc tao container
+        // Chi can set cac props co the thay doi runtime
+        const runtimeProps = [
+          ['persist.sys.timezone', 'Asia/Ho_Chi_Minh'],
+          ['gsm.operator.alpha', 'Viettel'],
+          ['gsm.operator.numeric', '45204'],
+          ['gsm.operator.iso-country', 'vn'],
+          ['gsm.sim.operator.alpha', 'Viettel'],
+          ['gsm.sim.operator.numeric', '45204'],
+          ['gsm.sim.operator.iso-country', 'vn'],
+          ['gsm.sim.state', 'READY'],
+          ['net.hostname', `android-${dev.androidId.substring(0,8)}`],
         ];
-        const sedCmd = props.map(p => {
-          const [key] = p.split('=');
-          return `-e '/^${key}=/d'`;
-        }).join(' ');
-        const appendCmd = props.map(p => `echo '${p}' >> /system/build.prop`).join(' && ');
-        await runCmd(`docker exec ${c} sh -c "mount -o remount,rw /system 2>/dev/null; sed -i ${sedCmd} /system/build.prop && ${appendCmd}"`);
+        for (const [key, val] of runtimeProps) {
+          await runCmd(`docker exec ${c} setprop ${key} ${val}`);
+        }
         await runCmd(`docker exec ${c} settings put secure android_id ${dev.androidId}`);
-        await runCmd(`docker exec ${c} setprop net.hostname android-${dev.androidId.substring(0,8)}`);
         console.log(`${phone.name}: Da spoof device info: ${dev.brand} ${dev.model}`);
 
         // Cai Zalo bang docker exec + pm (khong can ADB)
