@@ -800,32 +800,50 @@ class PhoneManager {
 
     const redsocksPort = relayPort;
     const configPath = `/tmp/redsocks_${phone.containerName}.conf`;
-    const proxyType = user ? 'http-connect' : 'http-connect';
-    const loginLine = user ? `login = "${user}";` : '';
-    const passLine = pass ? `password = "${pass}";` : '';
+    const loginLine = user ? `  login = "${user}";` : '';
+    const passLine = pass ? `  password = "${pass}";` : '';
 
-    const config = `
-base { log_debug = off; log_info = off; daemon = off; redirector = iptables; }
-redsocks {
-  local_ip = 0.0.0.0;
-  local_port = ${redsocksPort};
-  ip = ${targetHost};
-  port = ${targetPort};
-  type = ${proxyType};
-  ${loginLine}
-  ${passLine}
-}`;
+    const configLines = [
+      'base {',
+      '  log_debug = off;',
+      '  log_info = off;',
+      '  daemon = off;',
+      '  redirector = iptables;',
+      '}',
+      '',
+      'redsocks {',
+      `  local_ip = 0.0.0.0;`,
+      `  local_port = ${redsocksPort};`,
+      `  ip = ${targetHost};`,
+      `  port = ${targetPort};`,
+      `  type = http-connect;`,
+    ];
+    if (loginLine) configLines.push(loginLine);
+    if (passLine) configLines.push(passLine);
+    configLines.push('}');
 
     const { writeFileSync } = require('fs');
-    writeFileSync(configPath, config);
+    writeFileSync(configPath, configLines.join('\n') + '\n');
+
+    // Kill redsocks cu tren port nay neu co
+    await runCmd(`fuser -k ${redsocksPort}/tcp 2>/dev/null`);
+    await new Promise(r => setTimeout(r, 500));
 
     const { spawn } = require('child_process');
-    const proc = spawn('redsocks', ['-c', configPath], { stdio: 'ignore', detached: true });
+    const proc = spawn('redsocks', ['-c', configPath], { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
+    proc.stderr.on('data', (d) => console.error(`redsocks ${phone.name}: ${d.toString().trim()}`));
     proc.unref();
     proc.on('error', (err) => console.error(`Loi redsocks ${phone.name}:`, err.message));
 
-    await new Promise(r => setTimeout(r, 1000));
-    console.log(`Redsocks cho ${phone.name} tren port ${redsocksPort} -> ${targetHost}:${targetPort}`);
+    await new Promise(r => setTimeout(r, 1500));
+
+    // Verify redsocks dang listen
+    const { stdout: listening } = await runCmd(`ss -tlnp | grep ":${redsocksPort} " | head -1`);
+    if (listening) {
+      console.log(`Redsocks cho ${phone.name} OK - port ${redsocksPort} -> ${targetHost}:${targetPort}`);
+    } else {
+      console.error(`Redsocks cho ${phone.name} THAT BAI - port ${redsocksPort} khong listen!`);
+    }
 
     // HTTP relay van can cho http_proxy setting (backup)
     const http = require('http');
