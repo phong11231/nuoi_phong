@@ -629,7 +629,7 @@ class PhoneManager {
     if (this._zaloTimers[phone.id]) clearTimeout(this._zaloTimers[phone.id]);
 
     const scheduleNext = () => {
-      const delay = (1) * 60 * 1000; // TODO: doi lai (15 + Math.random() * 15) * 60 * 1000
+      const delay = (15 + Math.random() * 15) * 60 * 1000;
       const mins = Math.round(delay / 60000);
       this._zaloTimers[phone.id] = setTimeout(async () => {
         if (!phone || phone.status !== 'running') return;
@@ -638,19 +638,23 @@ class PhoneManager {
         // Bam nut vuong (recent apps)
         await runCmd(`docker exec ${c} input keyevent 187`);
         await new Promise(r => setTimeout(r, 2000));
-        // Luot len de dong tab Zalo (swipe manh tu giua len tren)
-        await runCmd(`docker exec ${c} input swipe 360 900 360 100 500`);
-        await new Promise(r => setTimeout(r, 1000));
+        // Luot len de dong tab Zalo
         await runCmd(`docker exec ${c} input swipe 360 900 360 100 500`);
         await new Promise(r => setTimeout(r, 1500));
-        // Force stop backup (dam bao Zalo dong han)
+        // Force stop backup
         await runCmd(`docker exec ${c} am force-stop com.zing.zalo`);
-        await new Promise(r => setTimeout(r, 2000));
         // Bam home
         await runCmd(`docker exec ${c} input keyevent 3`);
-        await new Promise(r => setTimeout(r, 1500));
-        // Mo lai Zalo
-        await runCmd(`docker exec ${c} am start -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
+        await new Promise(r => setTimeout(r, 3000));
+        // Mo lai Zalo (dung monkey thay vi am start)
+        await runCmd(`docker exec ${c} monkey -p com.zing.zalo -c android.intent.category.LAUNCHER 1 2>/dev/null`);
+        await new Promise(r => setTimeout(r, 3000));
+        // Verify Zalo da mo
+        const { stdout: zaloRunning } = await runCmd(`docker exec ${c} pidof com.zing.zalo 2>/dev/null`);
+        if (!zaloRunning) {
+          console.log(`${phone.name}: Zalo chua mo, thu lai...`);
+          await runCmd(`docker exec ${c} am start -n com.zing.zalo/com.zing.zalo.ui.LaunchActivity`);
+        }
         console.log(`${phone.name}: Da mo lai Zalo`);
         scheduleNext();
       }, delay);
