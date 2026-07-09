@@ -637,9 +637,14 @@ class PhoneManager {
         console.log(`${phone.name}: Dang dong Zalo (sau ${mins} phut)...`);
         // Bam nut vuong (recent apps)
         await runCmd(`docker exec ${c} input keyevent 187`);
+        await new Promise(r => setTimeout(r, 2000));
+        // Luot len de dong tab Zalo (swipe manh tu giua len tren)
+        await runCmd(`docker exec ${c} input swipe 360 900 360 100 500`);
+        await new Promise(r => setTimeout(r, 1000));
+        await runCmd(`docker exec ${c} input swipe 360 900 360 100 500`);
         await new Promise(r => setTimeout(r, 1500));
-        // Luot len de dong tab Zalo
-        await runCmd(`docker exec ${c} input swipe 540 1000 540 200 300`);
+        // Force stop backup (dam bao Zalo dong han)
+        await runCmd(`docker exec ${c} am force-stop com.zing.zalo`);
         await new Promise(r => setTimeout(r, 2000));
         // Bam home
         await runCmd(`docker exec ${c} input keyevent 3`);
