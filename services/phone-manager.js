@@ -789,8 +789,17 @@ class PhoneManager {
 
   async _startProxyRelay(phone, relayPort, targetHost, targetPort, user, pass) {
     if (!this._relays) this._relays = {};
+
+    // Chan goi lap lai trong 10 giay
+    const now = Date.now();
+    if (this._relays[phone.id] && this._relays[phone.id].lastStart && now - this._relays[phone.id].lastStart < 10000) {
+      console.log(`${phone.name}: Skip startProxyRelay (goi lai qua nhanh)`);
+      return;
+    }
+
     if (this._relays[phone.id]) {
       try {
+        if (this._relays[phone.id].watchdog) clearInterval(this._relays[phone.id].watchdog);
         if (this._relays[phone.id].process) this._relays[phone.id].process.kill();
         if (this._relays[phone.id].server) this._relays[phone.id].server.close();
       } catch (e) {}
@@ -829,12 +838,21 @@ class PhoneManager {
     await runCmd(`fuser -k ${redsocksPort}/tcp 2>/dev/null`);
     await new Promise(r => setTimeout(r, 500));
 
-    const { spawn } = require('child_process');
-    const proc = spawn('redsocks', ['-c', configPath], { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
-    proc.stderr.on('data', (d) => console.error(`redsocks ${phone.name}: ${d.toString().trim()}`));
-    proc.unref();
-    proc.on('error', (err) => console.error(`Loi redsocks ${phone.name}:`, err.message));
+    const startRedsocks = () => {
+      const { spawn } = require('child_process');
+      const proc = spawn('redsocks', ['-c', configPath], { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
+      proc.stderr.on('data', (d) => {
+        const msg = d.toString().trim();
+        if (msg.includes('goes down') || msg.includes('error')) {
+          console.error(`redsocks ${phone.name}: ${msg}`);
+        }
+      });
+      proc.unref();
+      proc.on('error', (err) => console.error(`Loi redsocks ${phone.name}:`, err.message));
+      return proc;
+    };
 
+    let proc = startRedsocks();
     await new Promise(r => setTimeout(r, 1500));
 
     // Verify redsocks dang listen
@@ -844,6 +862,19 @@ class PhoneManager {
     } else {
       console.error(`Redsocks cho ${phone.name} THAT BAI - port ${redsocksPort} khong listen!`);
     }
+
+    // Watchdog: kiem tra moi 30 giay, tu restart neu redsocks chet
+    const watchdog = setInterval(async () => {
+      try {
+        const { stdout: alive } = await runCmd(`ss -tlnp | grep ":${redsocksPort} " | head -1`);
+        if (!alive && this._relays[phone.id]) {
+          console.log(`${phone.name}: Redsocks chet, dang restart...`);
+          await runCmd(`fuser -k ${redsocksPort}/tcp 2>/dev/null`);
+          await new Promise(r => setTimeout(r, 500));
+          proc = startRedsocks();
+        }
+      } catch (e) {}
+    }, 30000);
 
     // HTTP relay van can cho http_proxy setting (backup)
     const http = require('http');
@@ -885,7 +916,7 @@ class PhoneManager {
     });
     server.on('error', () => {});
 
-    this._relays[phone.id] = { process: proc, server, configPath };
+    this._relays[phone.id] = { process: proc, server, configPath, watchdog, lastStart: Date.now() };
   }
 
   async removeProxy(id) {
@@ -905,6 +936,7 @@ class PhoneManager {
 
     if (this._relays && this._relays[id]) {
       try {
+        if (this._relays[id].watchdog) clearInterval(this._relays[id].watchdog);
         if (this._relays[id].process) this._relays[id].process.kill();
         if (this._relays[id].server) this._relays[id].server.close();
         if (this._relays[id].configPath) {
