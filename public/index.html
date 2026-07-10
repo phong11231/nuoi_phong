@@ -495,15 +495,16 @@
     <div style="padding:24px">
       <!-- Input keywords -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px">
-        <h3 style="margin-bottom:12px;font-size:16px">Tu khoa tim kiem</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
-          <div style="flex:1;min-width:300px">
-            <input type="text" id="scanKeywords" placeholder="Nhap tu khoa, cach nhau boi dau phay. VD: 2k10, toan, IELTS, ly hoa" style="width:100%;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h3 style="font-size:16px;margin:0">Tu khoa tim kiem</h3>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-green" id="btnStartScan" onclick="startScan()">Bat dau quet</button>
+            <button class="btn btn-red" id="btnStopScan" onclick="stopScan()" style="display:none">Dung</button>
+            <button class="btn btn-outline" onclick="clearScan()">Xoa ket qua</button>
           </div>
-          <button class="btn btn-green" id="btnStartScan" onclick="startScan()">Bat dau quet</button>
-          <button class="btn btn-red" id="btnStopScan" onclick="stopScan()" style="display:none">Dung</button>
-          <button class="btn btn-outline" onclick="clearScan()">Xoa ket qua</button>
         </div>
+        <div id="kwList"></div>
+        <button class="btn btn-outline btn-sm" onclick="addKwInput()" style="margin-top:10px">+ Them tu khoa</button>
       </div>
 
       <!-- Status -->
@@ -1026,11 +1027,35 @@
       loadAllStats();
     }
 
+    var kwCount = 0;
+    function addKwInput(val) {
+      kwCount++;
+      var id = 'kw_' + kwCount;
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px';
+      row.id = id + '_row';
+      row.innerHTML = '<input type="text" id="' + id + '" placeholder="VD: 2k10, toan, IELTS..." value="' + (val || '') + '" style="flex:1;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none">'
+        + (kwCount > 1 ? '<button class="btn btn-outline btn-sm" onclick="removeKwInput(\'' + id + '_row\')" style="padding:6px 10px;color:var(--red)">✕</button>' : '');
+      document.getElementById('kwList').appendChild(row);
+    }
+    function removeKwInput(rowId) {
+      var row = document.getElementById(rowId);
+      if (row) row.remove();
+    }
+    function getKeywords() {
+      var inputs = document.querySelectorAll('#kwList input[type=text]');
+      var kws = [];
+      inputs.forEach(function(inp) {
+        var v = inp.value.trim();
+        if (v) kws.push(v);
+      });
+      return kws;
+    }
+    addKwInput('');
+
     async function startScan() {
-      var input = document.getElementById('scanKeywords').value.trim();
-      if (!input) return alert('Nhap tu khoa truoc');
-      var keywords = input.split(',').map(function(k) { return k.trim(); }).filter(Boolean);
-      if (!keywords.length) return alert('Nhap tu khoa truoc');
+      var keywords = getKeywords();
+      if (!keywords.length) return alert('Nhap it nhat 1 tu khoa');
 
       try {
         var res = await fetch(API + '/api/zalo-scan/start', {
@@ -1117,28 +1142,6 @@
           html += '</tbody></table></div>';
         }
         html += '</div>';
-      }
-
-      // Bang tat ca (khong khop keyword)
-      if (data.all && data.all.length > 0) {
-        var matchedLinks = {};
-        for (var k in (data.grouped || {})) {
-          var grp = data.grouped[k];
-          for (var m = 0; m < grp.length; m++) matchedLinks[grp[m].link] = true;
-        }
-        var others = data.all.filter(function(r) { return !matchedLinks[r.link]; });
-        if (others.length > 0) {
-          html += '<div class="scan-table-wrap">';
-          html += '<div class="scan-table-header"><div style="display:flex;align-items:center;gap:10px"><h3>Nhom khac (khong khop keyword)</h3><span class="badge">' + others.length + ' nhom</span></div>';
-          html += '<button class="btn btn-green btn-sm" onclick="exportExcel(\'\')">Xuat Excel tat ca</button></div>';
-          html += '<div style="overflow-x:auto"><table class="scan-table"><thead><tr><th style="width:40px">#</th><th>Ten nhom</th><th>Link</th><th>Nguon</th></tr></thead><tbody>';
-          for (var n = 0; n < Math.min(others.length, 200); n++) {
-            var o = others[n];
-            html += '<tr><td>' + (n + 1) + '</td><td>' + esc(o.name) + '</td><td><a href="' + esc(o.link) + '" target="_blank">' + esc(o.link) + '</a></td><td>' + esc(o.source) + '</td></tr>';
-          }
-          if (others.length > 200) html += '<tr><td colspan="4" style="color:var(--text2);text-align:center">... va ' + (others.length - 200) + ' nhom khac</td></tr>';
-          html += '</tbody></table></div></div>';
-        }
       }
 
       el.innerHTML = html;
