@@ -505,6 +505,16 @@
             <button class="btn btn-outline btn-sm" id="btnZaloLogout" onclick="clearZaloCookie()" style="display:none">Dang xuat</button>
           </div>
           <div id="zaloLoginStatus" style="font-size:12px;color:var(--text2)">Chua dang nhap</div>
+          <div style="margin-top:10px;padding:10px;background:var(--surface2);border-radius:8px">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:6px">Lay tu phone dang chay:</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select id="phoneZaloSelect" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none">
+                <option value="">-- Chon phone --</option>
+              </select>
+              <button class="btn btn-primary btn-sm" onclick="extractPhoneZalo()">Lay token</button>
+            </div>
+            <div id="phoneZaloStatus" style="font-size:12px;margin-top:6px;display:none"></div>
+          </div>
           <div style="margin-top:10px">
             <div style="font-size:12px;color:var(--text2);margin-bottom:4px">Hoac dan cookie thu cong (lay tu DevTools → Network → Cookie):</div>
             <div style="display:flex;gap:8px;align-items:center">
@@ -1052,7 +1062,49 @@
       document.getElementById('btnNavPhone').style.display = '';
       document.getElementById('userLabel2').textContent = 'Admin';
       loadScanStatus();
+      loadPhoneZaloList();
       if (!scanInterval) scanInterval = setInterval(loadScanStatus, 2000);
+    }
+
+    async function loadPhoneZaloList() {
+      try {
+        var res = await fetch(API + '/api/zalo-scan/phones-zalo', { headers: headers() });
+        var phones = await res.json();
+        var sel = document.getElementById('phoneZaloSelect');
+        sel.innerHTML = '<option value="">-- Chon phone --</option>';
+        for (var p of phones) {
+          sel.innerHTML += '<option value="' + p.id + '">' + esc(p.name) + ' (' + esc(p.device) + ')</option>';
+        }
+      } catch (e) {}
+    }
+
+    async function extractPhoneZalo() {
+      var phoneId = document.getElementById('phoneZaloSelect').value;
+      if (!phoneId) return alert('Chon phone truoc');
+      var el = document.getElementById('phoneZaloStatus');
+      el.style.display = 'block';
+      el.style.color = 'var(--orange)';
+      el.textContent = 'Dang lay token tu phone...';
+      try {
+        var res = await fetch(API + '/api/zalo-scan/extract-phone', {
+          method: 'POST', headers: headers(),
+          body: JSON.stringify({ phoneId: phoneId })
+        });
+        var data = await res.json();
+        if (data.ok) {
+          el.style.color = 'var(--green)';
+          el.textContent = 'Da lay token! TK: ' + data.displayName + ' (zpw_sek:' + (data.tokens.zpwSek ? 'co' : 'khong') + ', zpsid:' + (data.tokens.zpsid ? 'co' : 'khong') + ')';
+          document.getElementById('zaloLoginStatus').textContent = 'Da dang nhap tu phone';
+          document.getElementById('zaloLoginStatus').style.color = 'var(--green)';
+          document.getElementById('btnZaloLogout').style.display = '';
+        } else {
+          el.style.color = 'var(--red)';
+          el.textContent = data.error || 'Loi khong ro';
+        }
+      } catch (e) {
+        el.style.color = 'var(--red)';
+        el.textContent = 'Loi ket noi server';
+      }
     }
 
     function showPhonePage() {

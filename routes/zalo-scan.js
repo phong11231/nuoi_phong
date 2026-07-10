@@ -4,10 +4,34 @@ const { authMiddleware } = require('../services/auth');
 const { ZaloScanner } = require('../services/zalo-scanner');
 const { ZaloLogin } = require('../services/zalo-login');
 
+const { phoneManager } = require('../services/phone-manager');
+
 const scanner = new ZaloScanner();
 const zaloLogin = new ZaloLogin();
 
 router.use(authMiddleware);
+
+// Lay danh sach phone co Zalo
+router.get('/phones-zalo', (req, res) => {
+  const phones = phoneManager.getAllPhones()
+    .filter(p => p.zaloInstalled && p.status === 'running')
+    .map(p => ({ id: p.id, name: p.name, containerName: p.containerName, device: p.device.brand + ' ' + p.device.model }));
+  res.json(phones);
+});
+
+// Extract token Zalo tu phone
+router.post('/extract-phone', async (req, res) => {
+  const { phoneId } = req.body;
+  const phone = phoneManager.getPhone(phoneId);
+  if (!phone) return res.json({ error: 'Phone khong ton tai' });
+  if (phone.status !== 'running') return res.json({ error: 'Phone chua chay' });
+
+  const result = await scanner.extractZaloFromPhone(phone.containerName);
+  if (result.ok) {
+    scanner.setZaloCredentials({ cookie: result.cookie, imei: result.imei });
+  }
+  res.json(result);
+});
 
 router.get('/status', (req, res) => {
   res.json(scanner.getStatus());

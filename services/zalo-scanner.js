@@ -235,6 +235,82 @@ class ZaloScanner {
     }
   }
 
+  async extractZaloFromPhone(containerName) {
+    try {
+      const { exec } = require('child_process');
+      const run = (cmd) => new Promise((resolve) => {
+        exec(cmd, { maxBuffer: 1024 * 1024 }, (err, stdout) => resolve(stdout ? stdout.trim() : ''));
+      });
+
+      // Doc SharedPreferences cua Zalo
+      const prefsDir = '/data/data/com.zing.zalo/shared_prefs';
+      const files = await run(`docker exec ${containerName} ls ${prefsDir} 2>/dev/null`);
+      if (!files) return { error: 'Khong tim thay du lieu Zalo. Zalo chua dang nhap?' };
+
+      let zpwSek = '', zpwEnk = '', zpsid = '', imei = '', uid = '', displayName = '';
+
+      // Doc tat ca pref files de tim token
+      const prefFiles = files.split('\n').filter(f => f.endsWith('.xml'));
+      for (const f of prefFiles) {
+        const content = await run(`docker exec ${containerName} cat ${prefsDir}/${f} 2>/dev/null`);
+        if (!content) continue;
+
+        const sekMatch = content.match(/name="zpw_sek"[^>]*>([^<]+)/);
+        if (sekMatch) zpwSek = sekMatch[1];
+
+        const enkMatch = content.match(/name="zpw_enk"[^>]*>([^<]+)/);
+        if (enkMatch) zpwEnk = enkMatch[1];
+
+        const sidMatch = content.match(/name="zpsid"[^>]*>([^<]+)/);
+        if (sidMatch) zpsid = sidMatch[1];
+
+        const imeiMatch = content.match(/name="imei"[^>]*>([^<]+)/) || content.match(/name="z_uuid"[^>]*>([^<]+)/);
+        if (imeiMatch) imei = imeiMatch[1];
+
+        const uidMatch = content.match(/name="uid"[^>]*>([^<]+)/) || content.match(/name="userId"[^>]*>([^<]+)/);
+        if (uidMatch) uid = uidMatch[1];
+
+        const nameMatch = content.match(/name="displayName"[^>]*>([^<]+)/) || content.match(/name="zaloName"[^>]*>([^<]+)/);
+        if (nameMatch) displayName = nameMatch[1];
+      }
+
+      // Thu doc database neu khong co trong prefs
+      if (!zpwSek && !zpwEnk) {
+        const dbContent = await run(`docker exec ${containerName} sqlite3 /data/data/com.zing.zalo/databases/zlstorage.db "SELECT key,value FROM kv WHERE key LIKE '%zpw%' OR key LIKE '%zpsid%' OR key LIKE '%imei%'" 2>/dev/null`);
+        if (dbContent) {
+          for (const line of dbContent.split('\n')) {
+            const [key, val] = line.split('|');
+            if (key === 'zpw_sek') zpwSek = val;
+            if (key === 'zpw_enk') zpwEnk = val;
+            if (key === 'zpsid') zpsid = val;
+            if (key === 'imei' || key === 'z_uuid') imei = val;
+          }
+        }
+      }
+
+      if (!zpwSek && !zpwEnk && !zpsid) {
+        return { error: 'Khong tim thay token Zalo. Tai khoan chua dang nhap hoac Zalo phien ban moi luu khac.' };
+      }
+
+      // Tao cookie string
+      const parts = [];
+      if (zpwSek) parts.push(`zpw_sek=${zpwSek}`);
+      if (zpwEnk) parts.push(`zpw_enk=${zpwEnk}`);
+      if (zpsid) parts.push(`zpsid=${zpsid}`);
+      const cookie = parts.join('; ');
+
+      return {
+        ok: true,
+        cookie,
+        imei: imei || 'browser',
+        displayName: displayName || uid || '(khong ro)',
+        tokens: { zpwSek: !!zpwSek, zpwEnk: !!zpwEnk, zpsid: !!zpsid },
+      };
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+
   async start(keywords) {
     if (this.running) return;
     this.keywords = keywords;
