@@ -30,9 +30,12 @@ router.post('/start', async (req, res) => {
     return res.json({ error: 'Chua nhap tu khoa' });
   }
 
-  res.json({ ok: true, message: 'Bat dau quet...' });
+  if (!scanner.zaloCredentials) {
+    return res.json({ error: 'Chua dang nhap Zalo. Nhap cookie truoc.' });
+  }
 
-  // Chay khong dong bo
+  res.json({ ok: true, message: 'Bat dau brute-force...' });
+
   scanner.start(keywords).catch(err => {
     console.error('Loi scanner:', err.message);
   });
@@ -45,6 +48,41 @@ router.post('/stop', (req, res) => {
 
 router.post('/clear', (req, res) => {
   scanner.clear();
+  res.json({ ok: true });
+});
+
+// Proxy
+router.post('/proxy', (req, res) => {
+  const { proxy } = req.body;
+  if (proxy && !/^[\w.\-]+:\d{1,5}(:\S+:\S+)?$/.test(proxy)) {
+    return res.json({ error: 'Sai format. Dung: host:port:user:pass' });
+  }
+  scanner.setProxy(proxy || null);
+  res.json({ ok: true, proxy: proxy || null });
+});
+
+router.delete('/proxy', (req, res) => {
+  scanner.setProxy(null);
+  res.json({ ok: true });
+});
+
+router.get('/check-ip', async (req, res) => {
+  const result = await scanner.checkIP();
+  res.json(result);
+});
+
+// Zalo login (cookie)
+router.post('/zalo-login', (req, res) => {
+  const { cookie, imei } = req.body;
+  if (!cookie) {
+    return res.json({ error: 'Nhap cookie Zalo' });
+  }
+  scanner.setZaloCredentials({ cookie, imei: imei || 'browser' });
+  res.json({ ok: true, message: 'Da luu cookie Zalo' });
+});
+
+router.delete('/zalo-login', (req, res) => {
+  scanner.setZaloCredentials(null);
   res.json({ ok: true });
 });
 

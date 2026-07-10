@@ -493,6 +493,30 @@
     </div>
 
     <div style="padding:24px">
+      <!-- Zalo Login + Proxy -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+        <!-- Zalo Cookie -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+          <h3 style="font-size:15px;margin:0 0 10px">Dang nhap Zalo</h3>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="zaloCookie" placeholder="Dan cookie Zalo vao day..." style="flex:1;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none">
+            <button class="btn btn-green btn-sm" onclick="saveZaloCookie()">Luu</button>
+            <button class="btn btn-outline btn-sm" onclick="clearZaloCookie()">Xoa</button>
+          </div>
+          <div id="zaloLoginStatus" style="font-size:12px;margin-top:6px;color:var(--text2)">Chua dang nhap</div>
+        </div>
+        <!-- Proxy -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+          <h3 style="font-size:15px;margin:0 0 10px">Proxy</h3>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="scanProxy" placeholder="host:port:user:pass" style="flex:1;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none">
+            <button class="btn btn-green btn-sm" onclick="saveScanProxy()">Luu</button>
+            <button class="btn btn-outline btn-sm" onclick="checkScanIP()">Check IP</button>
+          </div>
+          <div id="scanProxyStatus" style="font-size:12px;margin-top:6px;color:var(--text2)">Khong co proxy (dung IP VPS)</div>
+        </div>
+      </div>
+
       <!-- Input keywords -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -508,18 +532,18 @@
       </div>
 
       <!-- Status -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">
         <div class="stat-card">
           <div class="label">Trang thai</div>
           <div class="value" id="scanStatus" style="font-size:16px;color:var(--green)">Cho</div>
         </div>
         <div class="stat-card">
-          <div class="label">Google da quet</div>
-          <div class="value" id="scanGoogle" style="font-size:22px">0</div>
+          <div class="label">Da quet</div>
+          <div class="value" id="scanBrute" style="font-size:22px">0</div>
         </div>
         <div class="stat-card">
-          <div class="label">Brute-force da quet</div>
-          <div class="value" id="scanBrute" style="font-size:22px">0</div>
+          <div class="label">Toc do</div>
+          <div class="value" id="scanSpeed" style="font-size:22px">0 <small style="font-size:12px">req/s</small></div>
         </div>
         <div class="stat-card">
           <div class="label">Nhom tim duoc</div>
@@ -1027,6 +1051,63 @@
       loadAllStats();
     }
 
+    // --- Zalo Cookie ---
+    async function saveZaloCookie() {
+      var cookie = document.getElementById('zaloCookie').value.trim();
+      if (!cookie) return alert('Nhap cookie Zalo');
+      try {
+        var res = await fetch(API + '/api/zalo-scan/zalo-login', {
+          method: 'POST', headers: headers(),
+          body: JSON.stringify({ cookie: cookie })
+        });
+        var data = await res.json();
+        if (data.error) return alert(data.error);
+        document.getElementById('zaloLoginStatus').textContent = 'Da dang nhap';
+        document.getElementById('zaloLoginStatus').style.color = 'var(--green)';
+      } catch (e) { alert('Loi'); }
+    }
+
+    async function clearZaloCookie() {
+      await fetch(API + '/api/zalo-scan/zalo-login', { method: 'DELETE', headers: headers() });
+      document.getElementById('zaloCookie').value = '';
+      document.getElementById('zaloLoginStatus').textContent = 'Chua dang nhap';
+      document.getElementById('zaloLoginStatus').style.color = 'var(--text2)';
+    }
+
+    // --- Proxy ---
+    async function saveScanProxy() {
+      var proxy = document.getElementById('scanProxy').value.trim();
+      try {
+        var res = await fetch(API + '/api/zalo-scan/proxy', {
+          method: 'POST', headers: headers(),
+          body: JSON.stringify({ proxy: proxy || null })
+        });
+        var data = await res.json();
+        if (data.error) return alert(data.error);
+        document.getElementById('scanProxyStatus').textContent = proxy ? 'Proxy: ' + proxy.split(':').slice(0,2).join(':') : 'Khong co proxy (dung IP VPS)';
+        document.getElementById('scanProxyStatus').style.color = proxy ? 'var(--green)' : 'var(--text2)';
+      } catch (e) { alert('Loi'); }
+    }
+
+    async function checkScanIP() {
+      document.getElementById('scanProxyStatus').textContent = 'Dang check...';
+      try {
+        var res = await fetch(API + '/api/zalo-scan/check-ip', { headers: headers() });
+        var data = await res.json();
+        if (data.ip) {
+          document.getElementById('scanProxyStatus').textContent = 'IP: ' + data.ip;
+          document.getElementById('scanProxyStatus').style.color = 'var(--green)';
+        } else {
+          document.getElementById('scanProxyStatus').textContent = 'Loi: ' + (data.error || 'Khong ro');
+          document.getElementById('scanProxyStatus').style.color = 'var(--red)';
+        }
+      } catch (e) {
+        document.getElementById('scanProxyStatus').textContent = 'Loi ket noi';
+        document.getElementById('scanProxyStatus').style.color = 'var(--red)';
+      }
+    }
+
+    // --- Keywords ---
     var kwCount = 0;
     function addKwInput(val) {
       kwCount++;
@@ -1089,9 +1170,17 @@
 
         document.getElementById('scanStatus').textContent = s.running ? s.currentSource || 'Dang quet...' : 'Cho';
         document.getElementById('scanStatus').style.color = s.running ? 'var(--orange)' : 'var(--green)';
-        document.getElementById('scanGoogle').textContent = (s.stats.googleChecked || 0).toLocaleString();
         document.getElementById('scanBrute').textContent = (s.stats.bruteChecked || 0).toLocaleString();
+        document.getElementById('scanSpeed').innerHTML = (s.stats.speed || 0) + ' <small style="font-size:12px">req/s</small>';
         document.getElementById('scanFound').textContent = (s.stats.found || 0).toLocaleString();
+
+        // Cap nhat trang thai login + proxy
+        document.getElementById('zaloLoginStatus').textContent = s.loggedIn ? 'Da dang nhap' : 'Chua dang nhap';
+        document.getElementById('zaloLoginStatus').style.color = s.loggedIn ? 'var(--green)' : 'var(--text2)';
+        if (s.proxy) {
+          document.getElementById('scanProxyStatus').textContent = 'Proxy: ' + s.proxy;
+          document.getElementById('scanProxyStatus').style.color = 'var(--green)';
+        }
 
         if (s.running) {
           document.getElementById('btnStartScan').style.display = 'none';
