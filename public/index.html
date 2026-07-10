@@ -500,6 +500,7 @@
           <h3 style="font-size:15px;margin:0 0 10px">Dang nhap Zalo</h3>
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
             <button class="btn btn-green btn-sm" id="btnZaloLogin" onclick="startZaloQR()">Dang nhap (QR)</button>
+            <button class="btn btn-blue btn-sm" id="btnZaloRefresh" onclick="refreshZaloQR()" style="display:none">Lay ma moi</button>
             <button class="btn btn-red btn-sm" id="btnZaloCancel" onclick="cancelZaloQR()" style="display:none">Huy</button>
             <button class="btn btn-outline btn-sm" id="btnZaloLogout" onclick="clearZaloCookie()" style="display:none">Dang xuat</button>
           </div>
@@ -1080,6 +1081,7 @@
           document.getElementById('zaloQRImg').src = 'data:image/png;base64,' + data.qrImage;
           document.getElementById('zaloLoginStatus').textContent = 'Quet QR bang Zalo tren dien thoai...';
           document.getElementById('zaloLoginStatus').style.color = 'var(--orange)';
+          document.getElementById('btnZaloRefresh').style.display = '';
         }
 
         if (data.status === 'logged_in') {
@@ -1088,6 +1090,7 @@
           document.getElementById('zaloLoginStatus').textContent = 'Da dang nhap thanh cong!';
           document.getElementById('zaloLoginStatus').style.color = 'var(--green)';
           document.getElementById('btnZaloCancel').style.display = 'none';
+          document.getElementById('btnZaloRefresh').style.display = 'none';
           document.getElementById('btnZaloLogout').style.display = '';
         }
 
@@ -1098,6 +1101,7 @@
           document.getElementById('zaloLoginStatus').style.color = 'var(--red)';
           document.getElementById('btnZaloLogin').style.display = '';
           document.getElementById('btnZaloCancel').style.display = 'none';
+          document.getElementById('btnZaloRefresh').style.display = 'none';
         }
 
         if (data.status === 'idle') {
@@ -1106,12 +1110,28 @@
       } catch (e) {}
     }
 
+    async function refreshZaloQR() {
+      document.getElementById('btnZaloRefresh').disabled = true;
+      document.getElementById('zaloLoginStatus').textContent = 'Dang lay ma moi...';
+      document.getElementById('zaloLoginStatus').style.color = 'var(--orange)';
+      try {
+        var res = await fetch(API + '/api/zalo-scan/zalo-qr-refresh', { method: 'POST', headers: headers() });
+        var data = await res.json();
+        if (data.qrImage) {
+          document.getElementById('zaloQRImg').src = 'data:image/png;base64,' + data.qrImage;
+          document.getElementById('zaloLoginStatus').textContent = 'Quet QR bang Zalo tren dien thoai...';
+        }
+      } catch (e) {}
+      document.getElementById('btnZaloRefresh').disabled = false;
+    }
+
     async function cancelZaloQR() {
       if (qrPollInterval) { clearInterval(qrPollInterval); qrPollInterval = null; }
       await fetch(API + '/api/zalo-scan/zalo-qr-cancel', { method: 'POST', headers: headers() });
       document.getElementById('zaloQRWrap').style.display = 'none';
       document.getElementById('btnZaloLogin').style.display = '';
       document.getElementById('btnZaloCancel').style.display = 'none';
+      document.getElementById('btnZaloRefresh').style.display = 'none';
       document.getElementById('zaloLoginStatus').textContent = 'Chua dang nhap';
       document.getElementById('zaloLoginStatus').style.color = 'var(--text2)';
     }

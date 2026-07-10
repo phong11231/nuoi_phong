@@ -104,6 +104,11 @@ router.get('/zalo-qr-status', (req, res) => {
   res.json(status);
 });
 
+router.post('/zalo-qr-refresh', async (req, res) => {
+  await zaloLogin.refreshQR();
+  res.json(zaloLogin.getStatus());
+});
+
 router.post('/zalo-qr-cancel', async (req, res) => {
   await zaloLogin.cleanup();
   res.json({ ok: true });

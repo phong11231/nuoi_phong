@@ -58,11 +58,16 @@ class ZaloLogin {
       const url = this.page.url();
       console.log(`[QR] URL sau redirect: ${url}`);
 
-      // Doi trang login load xong (co the redirect sang id.zalo.me)
-      await this._sleep(3000);
+      // Doi trang login load xong
+      await this._sleep(2000);
       if (this._loginId !== myId) return;
 
-      // Tim QR element: thu canvas, img trong vung QR, hoac bat ky img nao lon
+      // Tim va click tab QR neu can
+      await this._switchToQRTab();
+      await this._sleep(2000);
+      if (this._loginId !== myId) return;
+
+      // Tim QR element
       const qrBase64 = await this._captureQR();
 
       if (qrBase64) {
@@ -189,6 +194,47 @@ class ZaloLogin {
       this.status = 'error';
       this.errorMsg = 'Het thoi gian cho (4 phut). Thu lai.';
       await this.cleanup();
+    }
+  }
+
+  async refreshQR() {
+    if (!this.page) return;
+    try {
+      // Click nut "Lay ma moi" tren trang Zalo
+      const clicked = await this.page.evaluate(() => {
+        const btns = document.querySelectorAll('button, a, div[role="button"], span');
+        for (const b of btns) {
+          const txt = (b.textContent || '').trim().toLowerCase();
+          if (txt.includes('lấy mã mới') || txt.includes('lay ma moi') || txt.includes('get new') || txt.includes('refresh')) {
+            b.click();
+            return true;
+          }
+        }
+        return false;
+      });
+
+      if (clicked) {
+        console.log('[QR] Da click "Lay ma moi"');
+        await this._sleep(2000);
+      } else {
+        console.log('[QR] Khong tim thay nut, reload trang...');
+        await this.page.reload({ waitUntil: 'networkidle2', timeout: 15000 });
+        await this._switchToQRTab();
+        await this._sleep(2000);
+      }
+
+      const qr = await this._captureQR();
+      if (qr) {
+        this.qrImage = qr;
+        this.status = 'qr_ready';
+        console.log('[QR] Da cap nhat QR moi');
+      } else {
+        const screenshot = await this.page.screenshot({ encoding: 'base64' });
+        this.qrImage = screenshot;
+        this.status = 'qr_ready';
+      }
+    } catch (e) {
+      console.error('[QR] Loi refresh:', e.message);
     }
   }
 
