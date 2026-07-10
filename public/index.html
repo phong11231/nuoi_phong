@@ -499,9 +499,8 @@
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
           <h3 style="font-size:15px;margin:0 0 10px">Dang nhap Zalo</h3>
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-            <button class="btn btn-green btn-sm" id="btnZaloLogin" onclick="startZaloQR()">Dang nhap (QR)</button>
-            <button class="btn btn-blue btn-sm" id="btnZaloRefresh" onclick="refreshZaloQR()" style="display:none">Lay ma moi</button>
-            <button class="btn btn-red btn-sm" id="btnZaloCancel" onclick="cancelZaloQR()" style="display:none">Huy</button>
+            <button class="btn btn-green btn-sm" id="btnZaloLogin" onclick="startZaloQR()">Dang nhap (Chrome ao)</button>
+            <button class="btn btn-red btn-sm" id="btnZaloCancel" onclick="cancelZaloQR()" style="display:none">Dong</button>
             <button class="btn btn-outline btn-sm" id="btnZaloLogout" onclick="clearZaloCookie()" style="display:none">Dang xuat</button>
           </div>
           <div id="zaloLoginStatus" style="font-size:12px;color:var(--text2)">Chua dang nhap</div>
@@ -525,8 +524,17 @@
             <div id="zaloCookieCheck" style="font-size:12px;margin-top:6px;display:none"></div>
           </div>
           <div id="zaloQRWrap" style="display:none;margin-top:10px;text-align:center">
-            <img id="zaloQRImg" style="max-width:200px;border-radius:8px;border:2px solid var(--border)">
-            <div style="font-size:11px;color:var(--text2);margin-top:6px">Mo Zalo tren dien thoai → Quet ma QR nay</div>
+            <div style="font-size:11px;color:var(--text2);margin-bottom:6px">Click truc tiep vao trinh duyet de dang nhap. Cookie se tu dong luu khi hoan tat.</div>
+            <div style="position:relative;display:inline-block;cursor:pointer;border:2px solid var(--border);border-radius:8px;overflow:hidden" id="zaloBrowserWrap">
+              <img id="zaloBrowserImg" style="width:450px;height:600px;display:block" draggable="false">
+            </div>
+            <div style="margin-top:6px;display:flex;gap:6px;justify-content:center;align-items:center">
+              <input type="text" id="zaloBrowserInput" placeholder="Go text roi Enter..." style="width:200px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+              <button class="btn btn-blue btn-sm" onclick="sendBrowserText()">Gui</button>
+              <button class="btn btn-outline btn-sm" onclick="sendBrowserKey('Backspace')">⌫</button>
+              <button class="btn btn-outline btn-sm" onclick="sendBrowserKey('Tab')">Tab</button>
+              <button class="btn btn-outline btn-sm" onclick="sendBrowserKey('Enter')">Enter</button>
+            </div>
           </div>
         </div>
         <!-- Proxy -->
@@ -1117,82 +1125,127 @@
       loadAllStats();
     }
 
-    // --- Zalo QR Login ---
-    var qrPollInterval = null;
+    // --- Zalo Virtual Browser Login ---
+    var browserPollInterval = null;
+    var browserStatusInterval = null;
 
     async function startZaloQR() {
       document.getElementById('btnZaloLogin').style.display = 'none';
       document.getElementById('btnZaloCancel').style.display = '';
-      document.getElementById('zaloLoginStatus').textContent = 'Dang tao QR...';
+      document.getElementById('zaloLoginStatus').textContent = 'Dang mo trinh duyet...';
       document.getElementById('zaloLoginStatus').style.color = 'var(--orange)';
 
       await fetch(API + '/api/zalo-scan/zalo-qr-start', { method: 'POST', headers: headers() });
 
-      if (qrPollInterval) clearInterval(qrPollInterval);
-      qrPollInterval = setInterval(pollZaloQR, 2000);
+      // Poll screenshot lien tuc
+      if (browserPollInterval) clearInterval(browserPollInterval);
+      browserPollInterval = setInterval(pollBrowserFrame, 700);
+
+      // Poll status (cookie check)
+      if (browserStatusInterval) clearInterval(browserStatusInterval);
+      browserStatusInterval = setInterval(pollBrowserStatus, 2000);
     }
 
-    async function pollZaloQR() {
+    async function pollBrowserFrame() {
+      try {
+        var res = await fetch(API + '/api/zalo-scan/zalo-browser-frame', { headers: headers() });
+        var data = await res.json();
+        if (data.screenshot) {
+          document.getElementById('zaloQRWrap').style.display = '';
+          document.getElementById('zaloBrowserImg').src = 'data:image/jpeg;base64,' + data.screenshot;
+        }
+      } catch (e) {}
+    }
+
+    async function pollBrowserStatus() {
       try {
         var res = await fetch(API + '/api/zalo-scan/zalo-qr-status', { headers: headers() });
         var data = await res.json();
 
-        if (data.status === 'qr_ready' && data.qrImage) {
-          document.getElementById('zaloQRWrap').style.display = '';
-          document.getElementById('zaloQRImg').src = 'data:image/png;base64,' + data.qrImage;
-          document.getElementById('zaloLoginStatus').textContent = 'Quet QR bang Zalo tren dien thoai...';
+        if (data.status === 'browsing') {
+          document.getElementById('zaloLoginStatus').textContent = 'Dang nhap trong trinh duyet ben duoi...';
           document.getElementById('zaloLoginStatus').style.color = 'var(--orange)';
-          document.getElementById('btnZaloRefresh').style.display = '';
         }
 
         if (data.status === 'logged_in') {
-          clearInterval(qrPollInterval); qrPollInterval = null;
+          stopBrowserPolling();
           document.getElementById('zaloQRWrap').style.display = 'none';
-          document.getElementById('zaloLoginStatus').textContent = 'Da dang nhap thanh cong!';
+          document.getElementById('zaloLoginStatus').textContent = 'Da dang nhap thanh cong! Cookie da tu dong luu.';
           document.getElementById('zaloLoginStatus').style.color = 'var(--green)';
           document.getElementById('btnZaloCancel').style.display = 'none';
-          document.getElementById('btnZaloRefresh').style.display = 'none';
           document.getElementById('btnZaloLogout').style.display = '';
         }
 
         if (data.status === 'error') {
-          clearInterval(qrPollInterval); qrPollInterval = null;
+          stopBrowserPolling();
           document.getElementById('zaloQRWrap').style.display = 'none';
           document.getElementById('zaloLoginStatus').textContent = 'Loi: ' + (data.error || 'Khong ro');
           document.getElementById('zaloLoginStatus').style.color = 'var(--red)';
           document.getElementById('btnZaloLogin').style.display = '';
           document.getElementById('btnZaloCancel').style.display = 'none';
-          document.getElementById('btnZaloRefresh').style.display = 'none';
         }
 
         if (data.status === 'idle') {
-          clearInterval(qrPollInterval); qrPollInterval = null;
+          stopBrowserPolling();
         }
       } catch (e) {}
     }
 
-    async function refreshZaloQR() {
-      document.getElementById('btnZaloRefresh').disabled = true;
-      document.getElementById('zaloLoginStatus').textContent = 'Dang lay ma moi...';
-      document.getElementById('zaloLoginStatus').style.color = 'var(--orange)';
-      try {
-        var res = await fetch(API + '/api/zalo-scan/zalo-qr-refresh', { method: 'POST', headers: headers() });
-        var data = await res.json();
-        if (data.qrImage) {
-          document.getElementById('zaloQRImg').src = 'data:image/png;base64,' + data.qrImage;
-          document.getElementById('zaloLoginStatus').textContent = 'Quet QR bang Zalo tren dien thoai...';
-        }
-      } catch (e) {}
-      document.getElementById('btnZaloRefresh').disabled = false;
+    function stopBrowserPolling() {
+      if (browserPollInterval) { clearInterval(browserPollInterval); browserPollInterval = null; }
+      if (browserStatusInterval) { clearInterval(browserStatusInterval); browserStatusInterval = null; }
     }
+
+    // Click vao trinh duyet ao
+    (function() {
+      document.addEventListener('click', function(e) {
+        var img = document.getElementById('zaloBrowserImg');
+        if (!img || e.target !== img) return;
+        var rect = img.getBoundingClientRect();
+        var scaleX = 450 / rect.width;
+        var scaleY = 600 / rect.height;
+        var x = Math.round((e.clientX - rect.left) * scaleX);
+        var y = Math.round((e.clientY - rect.top) * scaleY);
+        fetch(API + '/api/zalo-scan/zalo-browser-click', {
+          method: 'POST', headers: headers(),
+          body: JSON.stringify({ x: x, y: y })
+        });
+      });
+    })();
+
+    function sendBrowserText() {
+      var input = document.getElementById('zaloBrowserInput');
+      var text = input.value;
+      if (!text) return;
+      fetch(API + '/api/zalo-scan/zalo-browser-type', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ text: text })
+      });
+      input.value = '';
+    }
+
+    function sendBrowserKey(key) {
+      fetch(API + '/api/zalo-scan/zalo-browser-key', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ key: key })
+      });
+    }
+
+    // Enter trong o input gui text
+    document.addEventListener('keydown', function(e) {
+      var input = document.getElementById('zaloBrowserInput');
+      if (e.target === input && e.key === 'Enter') {
+        e.preventDefault();
+        sendBrowserText();
+      }
+    });
 
     async function cancelZaloQR() {
-      if (qrPollInterval) { clearInterval(qrPollInterval); qrPollInterval = null; }
+      stopBrowserPolling();
       await fetch(API + '/api/zalo-scan/zalo-qr-cancel', { method: 'POST', headers: headers() });
       document.getElementById('zaloQRWrap').style.display = 'none';
       document.getElementById('btnZaloLogin').style.display = '';
       document.getElementById('btnZaloCancel').style.display = 'none';
-      document.getElementById('btnZaloRefresh').style.display = 'none';
       document.getElementById('zaloLoginStatus').textContent = 'Chua dang nhap';
       document.getElementById('zaloLoginStatus').style.color = 'var(--text2)';
     }

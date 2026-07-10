@@ -117,10 +117,10 @@ router.delete('/zalo-login', (req, res) => {
   res.json({ ok: true });
 });
 
-// Zalo QR login (tu dong)
+// Zalo virtual browser login
 router.post('/zalo-qr-start', async (req, res) => {
-  res.json({ ok: true, message: 'Dang tao QR...' });
-  zaloLogin.startLogin().catch(e => console.error('QR login loi:', e.message));
+  res.json({ ok: true, message: 'Dang mo trinh duyet...' });
+  zaloLogin.startLogin().catch(e => console.error('Browser login loi:', e.message));
 });
 
 router.get('/zalo-qr-status', (req, res) => {
@@ -133,9 +133,28 @@ router.get('/zalo-qr-status', (req, res) => {
   res.json(status);
 });
 
-router.post('/zalo-qr-refresh', async (req, res) => {
-  await zaloLogin.refreshQR();
-  res.json(zaloLogin.getStatus());
+router.get('/zalo-browser-frame', (req, res) => {
+  const img = zaloLogin.getScreenshot();
+  if (!img) return res.json({ screenshot: null });
+  res.json({ screenshot: img });
+});
+
+router.post('/zalo-browser-click', async (req, res) => {
+  const { x, y } = req.body;
+  await zaloLogin.click(x, y);
+  res.json({ ok: true });
+});
+
+router.post('/zalo-browser-type', async (req, res) => {
+  const { text } = req.body;
+  await zaloLogin.type(text);
+  res.json({ ok: true });
+});
+
+router.post('/zalo-browser-key', async (req, res) => {
+  const { key } = req.body;
+  await zaloLogin.keyPress(key);
+  res.json({ ok: true });
 });
 
 router.post('/zalo-qr-cancel', async (req, res) => {
