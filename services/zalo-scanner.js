@@ -990,19 +990,21 @@ class ZaloScanner {
     this.keywords = keywords;
     this.running = true;
     this._stopFlag = false;
+    this._crawlDone = false;
     this.stats.startTime = Date.now();
     this.stats.bruteChecked = 0;
 
     console.log('[Scanner] Bat dau crawl da nguon (song song)...');
 
+    // Worker verify ten lien tuc trong khi crawl
+    const verifyWorker = this._liveVerifyWorker();
+
     // Chay TAT CA song song
     const tasks = [
-      // Nguon lon (khong can keyword)
       this._crawlCommonCrawl(),
       this._crawlWayback(),
       this._crawlLinkSites(),
 
-      // Search engines + Facebook + Threads (theo keyword)
       ...keywords.flatMap(kw => [
         this._crawlBing(kw),
         this._crawlDuckDuckGo(kw),
@@ -1016,14 +1018,67 @@ class ZaloScanner {
 
     await Promise.allSettled(tasks);
 
-    // Sau khi crawl xong, verify ten nhom cho cac link chua co ten
-    if (!this._stopFlag) {
-      await this._verifyUnnamedResults();
-    }
+    // Bao cho verify worker biet crawl xong roi, doi no quet not phan con lai
+    this._crawlDone = true;
+    await verifyWorker;
 
     this.running = false;
     this.currentSource = `Crawl hoan tat. Tim duoc ${this.stats.found} nhom.`;
     console.log(`[Scanner] Crawl xong. Tim duoc ${this.stats.found} nhom.`);
+  }
+
+  // Worker chay song song voi crawl, lien tuc verify ten nhom
+  async _liveVerifyWorker() {
+    let lastChecked = 0;
+    let totalVerified = 0;
+
+    while (!this._stopFlag) {
+      // Doi cho den khi co cookie
+      if (!this.zaloCredentials) {
+        if (this._crawlDone) break;
+        await this._sleep(2000);
+        continue;
+      }
+
+      // Tim cac link chua co ten (ten bat dau bang '(')
+      const unnamed = this.results.filter((r, idx) => idx >= lastChecked || r.name.startsWith('('));
+      const toVerify = unnamed.filter(r => r.name.startsWith('('));
+      lastChecked = this.results.length;
+
+      if (toVerify.length === 0) {
+        if (this._crawlDone) break;
+        await this._sleep(1000);
+        continue;
+      }
+
+      for (const r of toVerify) {
+        if (this._stopFlag) return;
+        if (!this.zaloCredentials) break;
+        if (!r.name.startsWith('(')) continue; // da verify roi
+
+        const code = r.link.replace('https://zalo.me/g/', '');
+        try {
+          const info = await this._checkGroupLink(code);
+          if (info && info.name) {
+            r.name = info.name;
+            totalVerified++;
+            console.log(`[LiveVerify] ${info.name} - ${r.link}`);
+          }
+        } catch (e) {
+          if (e.message && e.message.includes('blocked')) {
+            console.log('[LiveVerify] Zalo block, doi 30s...');
+            await this._sleep(30000);
+          }
+        }
+
+        if (totalVerified % 10 === 0) {
+          this.currentSource = `Verify song song: ${totalVerified} da check`;
+        }
+        await this._sleep(300);
+      }
+    }
+
+    console.log(`[LiveVerify] Hoan tat. Da verify ${totalVerified} nhom.`);
   }
 
   // Brute-force (can cookie)
