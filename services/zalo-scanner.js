@@ -485,7 +485,174 @@ class ZaloScanner {
     }
   }
 
-  // Crawl Google + web (khong can cookie)
+  // ===== BING CRAWL =====
+  async _crawlBing(keyword) {
+    const queries = [
+      `"zalo.me/g/" ${keyword}`,
+      `site:zalo.me/g/ ${keyword}`,
+      `link nhóm zalo ${keyword}`,
+    ];
+
+    for (const q of queries) {
+      if (this._stopFlag) return;
+      this.currentSource = `Bing: "${q}"`;
+      console.log(`[Crawl] Bing: ${q}`);
+
+      for (let page = 0; page < 5; page++) {
+        if (this._stopFlag) return;
+        try {
+          const config = this._getAxiosConfig(15000);
+          config.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'Accept': 'text/html',
+            'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
+          };
+          const url = `https://www.bing.com/search?q=${encodeURIComponent(q)}&first=${page * 10 + 1}`;
+          const res = await axios.get(url, config);
+          await this._extractZaloLinks(res.data, 'Bing');
+          await this._sleep(3000);
+        } catch (e) {
+          console.log(`[Crawl] Bing loi: ${e.message}`);
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== DUCKDUCKGO CRAWL =====
+  async _crawlDuckDuckGo(keyword) {
+    const queries = [
+      `"zalo.me/g/" ${keyword}`,
+      `nhóm zalo ${keyword} zalo.me/g/`,
+    ];
+
+    for (const q of queries) {
+      if (this._stopFlag) return;
+      this.currentSource = `DuckDuckGo: "${q}"`;
+      console.log(`[Crawl] DuckDuckGo: ${q}`);
+
+      try {
+        const config = this._getAxiosConfig(15000);
+        config.headers = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          'Accept': 'text/html',
+        };
+        const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+        const res = await axios.get(url, config);
+        await this._extractZaloLinks(res.data, 'DuckDuckGo');
+        await this._sleep(3000);
+      } catch (e) {
+        console.log(`[Crawl] DuckDuckGo loi: ${e.message}`);
+      }
+    }
+  }
+
+  // ===== YANDEX CRAWL =====
+  async _crawlYandex(keyword) {
+    const queries = [
+      `"zalo.me/g/" ${keyword}`,
+      `nhóm zalo ${keyword}`,
+    ];
+
+    for (const q of queries) {
+      if (this._stopFlag) return;
+      this.currentSource = `Yandex: "${q}"`;
+      console.log(`[Crawl] Yandex: ${q}`);
+
+      for (let page = 0; page < 3; page++) {
+        if (this._stopFlag) return;
+        try {
+          const config = this._getAxiosConfig(15000);
+          config.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'Accept': 'text/html',
+          };
+          const url = `https://yandex.com/search/?text=${encodeURIComponent(q)}&p=${page}`;
+          const res = await axios.get(url, config);
+          await this._extractZaloLinks(res.data, 'Yandex');
+          await this._sleep(4000);
+        } catch (e) {
+          console.log(`[Crawl] Yandex loi: ${e.message}`);
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== SCRAPE TRANG TONG HOP LINK =====
+  async _crawlLinkSites() {
+    const sites = [
+      { name: 'whtspgrouplink', url: 'https://whtspgrouplink.com/zalo-group-links/' },
+      { name: 'vinazalo-sinhvien', url: 'https://vinazalo.vn/tong-hop-danh-sach-100-nhom-zalo-sinh-vien-khap-ca-nuoc/' },
+      { name: 'vinazalo-vieclam', url: 'https://vinazalo.vn/danh-sach-100-nhom-zalo-viec-lam-tang-co-hoi-tim-kiem-cong-viec/' },
+    ];
+
+    for (const site of sites) {
+      if (this._stopFlag) return;
+      this.currentSource = `Scrape: ${site.name}`;
+      console.log(`[Crawl] Scrape ${site.name}...`);
+
+      try {
+        const config = this._getAxiosConfig(15000);
+        config.headers = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'text/html',
+        };
+        const res = await axios.get(site.url, config);
+        await this._extractZaloLinks(res.data, site.name);
+        await this._sleep(2000);
+      } catch (e) {
+        console.log(`[Crawl] ${site.name} loi: ${e.message}`);
+      }
+    }
+  }
+
+  // ===== HELPER: Extract zalo.me/g/ links tu HTML =====
+  async _extractZaloLinks(html, source) {
+    const linkRegex = /https?:\/\/zalo\.me\/g\/([a-zA-Z0-9]+)/g;
+    let match;
+    const codes = new Set();
+
+    while ((match = linkRegex.exec(html)) !== null) {
+      codes.add(match[1]);
+    }
+
+    // Cung tim link dang zalo.me/g/ khong co https
+    const linkRegex2 = /zalo\.me\/g\/([a-zA-Z0-9]{5,25})/g;
+    while ((match = linkRegex2.exec(html)) !== null) {
+      codes.add(match[1]);
+    }
+
+    console.log(`[Crawl] ${source}: tim thay ${codes.size} link`);
+
+    for (const code of codes) {
+      if (this._stopFlag) return;
+      const link = `https://zalo.me/g/${code}`;
+
+      if (this.results.find(r => r.link === link)) continue;
+
+      if (this.zaloCredentials) {
+        try {
+          const info = await this._checkGroupLink(code);
+          if (info && info.name) {
+            this._addResult(info.name, link, source);
+            console.log(`[FOUND-${source}] ${info.name} - ${link}`);
+          }
+        } catch (e) {
+          if (e.message && e.message.includes('blocked')) {
+            console.log(`[Crawl] Zalo block khi verify, doi 30s...`);
+            await this._sleep(30000);
+          }
+        }
+      } else {
+        this._addResultAny(link, source);
+      }
+
+      await this._sleep(500);
+    }
+  }
+
+  // Crawl tat ca nguon (khong can cookie)
   async startCrawl(keywords) {
     if (this.running) return;
     this.keywords = keywords;
@@ -494,15 +661,25 @@ class ZaloScanner {
     this.stats.startTime = Date.now();
     this.stats.bruteChecked = 0;
 
-    console.log('[Scanner] Bat dau crawl Google + web...');
+    console.log('[Scanner] Bat dau crawl da nguon...');
+
+    // 1. Scrape trang tong hop link (khong can keyword)
+    await this._crawlLinkSites();
+
+    // 2. Crawl search engines theo keyword
     for (const kw of keywords) {
       if (this._stopFlag) break;
+      console.log(`[Scanner] Crawl keyword: "${kw}"`);
+
+      await this._crawlBing(kw);
+      await this._crawlDuckDuckGo(kw);
+      await this._crawlYandex(kw);
       await this._crawlGoogle(kw);
       await this._crawlShareSites(kw);
     }
 
     this.running = false;
-    this.currentSource = 'Crawl hoan tat';
+    this.currentSource = `Crawl hoan tat. Tim duoc ${this.stats.found} nhom.`;
     console.log(`[Scanner] Crawl xong. Tim duoc ${this.stats.found} nhom.`);
   }
 
