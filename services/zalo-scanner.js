@@ -155,6 +155,13 @@ class ZaloScanner {
     }
   }
 
+  _hasTriple(code) {
+    for (let i = 0; i < code.length - 2; i++) {
+      if (code[i] === code[i + 1] && code[i] === code[i + 2]) return true;
+    }
+    return false;
+  }
+
   async _bruteWorker(workerId) {
     while (!this._stopFlag) {
       if (this._blocked) {
@@ -162,7 +169,10 @@ class ZaloScanner {
         continue;
       }
 
-      const code = this._randomCode(workerId);
+      let code = this._randomCode(workerId);
+      while (this._hasTriple(code)) {
+        code = this._randomCode(workerId);
+      }
 
       try {
         const info = await this._checkGroupLink(code);
