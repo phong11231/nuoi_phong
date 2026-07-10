@@ -392,7 +392,7 @@ class ZaloScanner {
               } catch (e) {}
             } else {
               // Khong co cookie thi van luu link, ten = code
-              this._addResultAny(link, 'Google');
+              await this._addResultWithPageName(code, link, 'Google');
             }
           }
 
@@ -461,7 +461,7 @@ class ZaloScanner {
                 }
               } catch (e) {}
             } else {
-              this._addResultAny(link, site.name);
+              await this._addResultWithPageName(code, link, site.name);
             }
           }
 
@@ -475,12 +475,56 @@ class ZaloScanner {
     }
   }
 
-  // Luu link khi khong co cookie (khong check ten)
-  _addResultAny(link, source) {
+  // Lay ten nhom tu trang zalo.me/g/xxx (khong can cookie)
+  async _getGroupNameFromPage(code) {
+    try {
+      const config = this._getAxiosConfig(10000);
+      config.headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Accept': 'text/html',
+      };
+      config.maxRedirects = 5;
+      const res = await axios.get(`https://zalo.me/g/${code}`, config);
+      const html = res.data;
+
+      // Thu lay tu og:title
+      const ogMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i)
+        || html.match(/<meta\s+content=["']([^"']+)["']\s+property=["']og:title["']/i);
+      if (ogMatch && ogMatch[1] && ogMatch[1].length > 1) {
+        return ogMatch[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+      }
+
+      // Thu lay tu <title>
+      const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+      if (titleMatch && titleMatch[1] && !titleMatch[1].includes('Zalo') && titleMatch[1].length > 2) {
+        return titleMatch[1].replace(/&amp;/g, '&').trim();
+      }
+
+      // Thu lay tu og:description
+      const descMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i)
+        || html.match(/<meta\s+content=["']([^"']+)["']\s+property=["']og:description["']/i);
+      if (descMatch && descMatch[1]) {
+        return descMatch[1].replace(/&amp;/g, '&').trim();
+      }
+
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Luu link khi khong co cookie — thu lay ten tu trang web
+  async _addResultWithPageName(code, link, source) {
     link = link.split('?')[0].split('#')[0];
     const exists = this.results.find(r => r.link === link);
-    if (!exists) {
-      this.results.push({ name: '(chua check ten)', link, source, foundAt: Date.now() });
+    if (exists) return;
+
+    const name = await this._getGroupNameFromPage(code);
+    if (name) {
+      this._addResult(name, link, source);
+      console.log(`[FOUND-${source}] ${name} - ${link}`);
+    } else {
+      this.results.push({ name: '(khong lay duoc ten)', link, source, foundAt: Date.now() });
       this.stats.found = this.results.length;
     }
   }
@@ -645,7 +689,7 @@ class ZaloScanner {
           }
         }
       } else {
-        this._addResultAny(link, source);
+        await this._addResultWithPageName(code, link, source);
       }
 
       await this._sleep(500);
