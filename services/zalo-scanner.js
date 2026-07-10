@@ -139,19 +139,32 @@ class ZaloScanner {
     this.currentSource = '';
   }
 
-  async _bruteWorker(workerId) {
+  _randomCode(workerId) {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     const letters = 'abcdefghijklmnopqrstuvwxyz';
     const digits = '0123456789';
 
+    // Nua worker dung dang 9 ky tu (6 chu + 3 so), nua dung dang 18 ky tu
+    if (workerId % 2 === 0) {
+      let code = '';
+      for (let i = 0; i < 6; i++) code += letters[Math.floor(Math.random() * 26)];
+      for (let i = 0; i < 3; i++) code += digits[Math.floor(Math.random() * 10)];
+      return code;
+    } else {
+      let code = '';
+      for (let i = 0; i < 18; i++) code += chars[Math.floor(Math.random() * 36)];
+      return code;
+    }
+  }
+
+  async _bruteWorker(workerId) {
     while (!this._stopFlag) {
       if (this._blocked) {
         await this._sleep(5000);
         continue;
       }
 
-      let code = '';
-      for (let i = 0; i < 6; i++) code += letters[Math.floor(Math.random() * 26)];
-      for (let i = 0; i < 3; i++) code += digits[Math.floor(Math.random() * 10)];
+      const code = this._randomCode(workerId);
 
       try {
         const info = await this._checkGroupLink(code);
@@ -311,10 +324,170 @@ class ZaloScanner {
     }
   }
 
+  // ===== CRAWL GOOGLE + WEB =====
+  async _crawlGoogle(keyword) {
+    const queries = [
+      `site:zalo.me/g/ ${keyword}`,
+      `zalo.me/g/ nhóm ${keyword}`,
+      `"zalo.me/g/" "${keyword}"`,
+      `link nhóm zalo ${keyword}`,
+    ];
+
+    for (const q of queries) {
+      if (this._stopFlag) return;
+      this.currentSource = `Google: "${q}"`;
+      console.log(`[Crawl] Google: ${q}`);
+
+      for (let page = 0; page < 5; page++) {
+        if (this._stopFlag) return;
+        try {
+          const config = this._getAxiosConfig(15000);
+          config.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'Accept': 'text/html',
+          };
+          const url = `https://www.google.com/search?q=${encodeURIComponent(q)}&start=${page * 10}`;
+          const res = await axios.get(url, config);
+          const html = res.data;
+
+          // Tim tat ca link zalo.me/g/
+          const linkRegex = /https?:\/\/zalo\.me\/g\/([a-zA-Z0-9]+)/g;
+          let match;
+          while ((match = linkRegex.exec(html)) !== null) {
+            const code = match[1];
+            const link = `https://zalo.me/g/${code}`;
+
+            // Thu lay ten nhom qua API
+            if (this.zaloCredentials) {
+              try {
+                const info = await this._checkGroupLink(code);
+                if (info && info.name) {
+                  this._addResult(info.name, link, 'Google');
+                  console.log(`[FOUND-Google] ${info.name} - ${link}`);
+                }
+              } catch (e) {}
+            } else {
+              // Khong co cookie thi van luu link, ten = code
+              this._addResultAny(link, 'Google');
+            }
+          }
+
+          // Tim ten nhom trong snippet Google
+          const snippetRegex = /zalo\.me\/g\/([a-zA-Z0-9]+)[^"]*?<[^>]*>([^<]{3,80})/g;
+          while ((match = snippetRegex.exec(html)) !== null) {
+            const code = match[1];
+            const name = match[2].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+            if (name && code) {
+              this._addResult(name, `https://zalo.me/g/${code}`, 'Google');
+            }
+          }
+
+          await this._sleep(2000);
+        } catch (e) {
+          console.log(`[Crawl] Google loi: ${e.message}`);
+          if (e.response && e.response.status === 429) {
+            console.log('[Crawl] Google rate limit, doi 30s...');
+            await this._sleep(30000);
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  async _crawlShareSites(keyword) {
+    const sites = [
+      { name: 'nhomkinzalo.com', url: `https://nhomkinzalo.com/?s=${encodeURIComponent(keyword)}` },
+      { name: 'phanmemzalo.vn', url: `https://phanmemzalo.vn/?s=${encodeURIComponent(keyword)}` },
+      { name: 'timgroup.vn', url: `https://timgroup.vn/?s=${encodeURIComponent(keyword)}` },
+      { name: 'zalogroup.com', url: `https://zalogroup.com/?s=${encodeURIComponent(keyword)}` },
+    ];
+
+    for (const site of sites) {
+      if (this._stopFlag) return;
+      this.currentSource = `Crawl: ${site.name}`;
+      console.log(`[Crawl] ${site.name}: ${keyword}`);
+
+      for (let page = 1; page <= 10; page++) {
+        if (this._stopFlag) return;
+        try {
+          const config = this._getAxiosConfig(15000);
+          config.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html',
+          };
+          const pageUrl = page === 1 ? site.url : `${site.url}&page=${page}`;
+          const res = await axios.get(pageUrl, config);
+          const html = res.data;
+
+          const linkRegex = /https?:\/\/zalo\.me\/g\/([a-zA-Z0-9]+)/g;
+          let match;
+          let foundOnPage = 0;
+          while ((match = linkRegex.exec(html)) !== null) {
+            const code = match[1];
+            const link = `https://zalo.me/g/${code}`;
+            foundOnPage++;
+
+            if (this.zaloCredentials) {
+              try {
+                const info = await this._checkGroupLink(code);
+                if (info && info.name) {
+                  this._addResult(info.name, link, site.name);
+                  console.log(`[FOUND-${site.name}] ${info.name} - ${link}`);
+                }
+              } catch (e) {}
+            } else {
+              this._addResultAny(link, site.name);
+            }
+          }
+
+          if (foundOnPage === 0) break;
+          await this._sleep(1000);
+        } catch (e) {
+          console.log(`[Crawl] ${site.name} loi: ${e.message}`);
+          break;
+        }
+      }
+    }
+  }
+
+  // Luu link khi khong co cookie (khong check ten)
+  _addResultAny(link, source) {
+    link = link.split('?')[0].split('#')[0];
+    const exists = this.results.find(r => r.link === link);
+    if (!exists) {
+      this.results.push({ name: '(chua check ten)', link, source, foundAt: Date.now() });
+      this.stats.found = this.results.length;
+    }
+  }
+
   async start(keywords) {
     if (this.running) return;
     this.keywords = keywords;
-    await this.startBruteforce();
+    this.running = true;
+    this._stopFlag = false;
+    this.stats.startTime = Date.now();
+
+    // Buoc 1: Crawl Google + web chia se (nhanh, co ket qua lien)
+    console.log('[Scanner] Bat dau crawl Google + web...');
+    for (const kw of keywords) {
+      if (this._stopFlag) break;
+      await this._crawlGoogle(kw);
+      await this._crawlShareSites(kw);
+    }
+
+    if (this._stopFlag) {
+      this.running = false;
+      return;
+    }
+
+    // Buoc 2: Brute-force chay nen (tiep tuc tim them)
+    console.log('[Scanner] Crawl xong, chuyen sang brute-force...');
+    if (this.zaloCredentials) {
+      await this.startBruteforce();
+    }
+
+    this.running = false;
   }
 
   _sleep(ms) {
