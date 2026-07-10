@@ -67,6 +67,24 @@ router.post('/start', async (req, res) => {
   });
 });
 
+// Crawl Google + web (khong can cookie)
+router.post('/crawl', async (req, res) => {
+  if (scanner.running) {
+    return res.json({ error: 'Dang quet, vui long cho...' });
+  }
+
+  const { keywords } = req.body;
+  if (!keywords || !keywords.length) {
+    return res.json({ error: 'Chua nhap tu khoa' });
+  }
+
+  res.json({ ok: true, message: 'Bat dau crawl Google + web...' });
+
+  scanner.startCrawl(keywords).catch(err => {
+    console.error('Loi crawl:', err.message);
+  });
+});
+
 router.post('/stop', (req, res) => {
   scanner.stop();
   res.json({ ok: true });

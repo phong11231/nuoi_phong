@@ -461,14 +461,15 @@ class ZaloScanner {
     }
   }
 
-  async start(keywords) {
+  // Crawl Google + web (khong can cookie)
+  async startCrawl(keywords) {
     if (this.running) return;
     this.keywords = keywords;
     this.running = true;
     this._stopFlag = false;
     this.stats.startTime = Date.now();
+    this.stats.bruteChecked = 0;
 
-    // Buoc 1: Crawl Google + web chia se (nhanh, co ket qua lien)
     console.log('[Scanner] Bat dau crawl Google + web...');
     for (const kw of keywords) {
       if (this._stopFlag) break;
@@ -476,18 +477,17 @@ class ZaloScanner {
       await this._crawlShareSites(kw);
     }
 
-    if (this._stopFlag) {
-      this.running = false;
-      return;
-    }
-
-    // Buoc 2: Brute-force chay nen (tiep tuc tim them)
-    console.log('[Scanner] Crawl xong, chuyen sang brute-force...');
-    if (this.zaloCredentials) {
-      await this.startBruteforce();
-    }
-
     this.running = false;
+    this.currentSource = 'Crawl hoan tat';
+    console.log(`[Scanner] Crawl xong. Tim duoc ${this.stats.found} nhom.`);
+  }
+
+  // Brute-force (can cookie)
+  async start(keywords) {
+    if (this.running) return;
+    if (!this.zaloCredentials) return;
+    this.keywords = keywords;
+    await this.startBruteforce();
   }
 
   _sleep(ms) {

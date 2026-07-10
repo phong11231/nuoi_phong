@@ -554,7 +554,8 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <h3 style="font-size:16px;margin:0">Tu khoa tim kiem</h3>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-green" id="btnStartScan" onclick="startScan()">Bat dau quet</button>
+            <button class="btn btn-blue" id="btnCrawl" onclick="startCrawl()">Crawl Google</button>
+            <button class="btn btn-green" id="btnStartScan" onclick="startScan()">Brute-force</button>
             <button class="btn btn-red" id="btnStopScan" onclick="stopScan()" style="display:none">Dung</button>
             <button class="btn btn-outline" onclick="clearScan()">Xoa ket qua</button>
           </div>
@@ -1355,6 +1356,23 @@
     }
     addKwInput('');
 
+    async function startCrawl() {
+      var keywords = getKeywords();
+      if (!keywords.length) return alert('Nhap it nhat 1 tu khoa');
+
+      try {
+        var res = await fetch(API + '/api/zalo-scan/crawl', {
+          method: 'POST', headers: headers(),
+          body: JSON.stringify({ keywords: keywords })
+        });
+        var data = await res.json();
+        if (data.error) return alert(data.error);
+        document.getElementById('btnCrawl').style.display = 'none';
+        document.getElementById('btnStartScan').style.display = 'none';
+        document.getElementById('btnStopScan').style.display = '';
+      } catch (e) { alert('Loi ket noi server'); }
+    }
+
     async function startScan() {
       var keywords = getKeywords();
       if (!keywords.length) return alert('Nhap it nhat 1 tu khoa');
@@ -1366,6 +1384,7 @@
         });
         var data = await res.json();
         if (data.error) return alert(data.error);
+        document.getElementById('btnCrawl').style.display = 'none';
         document.getElementById('btnStartScan').style.display = 'none';
         document.getElementById('btnStopScan').style.display = '';
       } catch (e) { alert('Loi ket noi server'); }
@@ -1373,6 +1392,7 @@
 
     async function stopScan() {
       await fetch(API + '/api/zalo-scan/stop', { method: 'POST', headers: headers() });
+      document.getElementById('btnCrawl').style.display = '';
       document.getElementById('btnStartScan').style.display = '';
       document.getElementById('btnStopScan').style.display = 'none';
     }
@@ -1404,9 +1424,11 @@
         }
 
         if (s.running) {
+          document.getElementById('btnCrawl').style.display = 'none';
           document.getElementById('btnStartScan').style.display = 'none';
           document.getElementById('btnStopScan').style.display = '';
         } else {
+          document.getElementById('btnCrawl').style.display = '';
           document.getElementById('btnStartScan').style.display = '';
           document.getElementById('btnStopScan').style.display = 'none';
         }
