@@ -213,12 +213,23 @@ class ZaloScanner {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://chat.zalo.me/',
       };
-      const res = await axios.get('https://tt-profile-wpa.chat.zalo.me/api/social/profile/me', config);
-      if (res.data && res.data.data) {
-        const d = res.data.data;
-        return { ok: true, name: d.displayName || d.zaloName || 'Unknown', avatar: d.avatar };
+      // Thu lay profile
+      try {
+        const profileRes = await axios.get('https://tt-profile-wpa.chat.zalo.me/api/social/profile/me', config);
+        if (profileRes.data && profileRes.data.data) {
+          const d = profileRes.data.data;
+          return { ok: true, name: d.displayName || d.zaloName || 'Unknown' };
+        }
+      } catch (e) {}
+      // Fallback: thu check 1 group link de xem cookie co hoat dong
+      const testRes = await axios.get('https://tt-group-wpa.chat.zalo.me/api/group/link/ginfo?link=hghlyl492', config);
+      if (testRes.data && testRes.data.error_code === 0) {
+        return { ok: true, name: '(Cookie hop le - da kiem tra bang group API)' };
       }
-      return { error: 'Khong lay duoc thong tin. Cookie co the sai hoac het han.' };
+      if (testRes.data && testRes.data.error_code === -1000) {
+        return { error: 'Cookie bi block. Thu cookie khac.' };
+      }
+      return { error: 'Cookie khong hop le hoac het han. error_code=' + (testRes.data ? testRes.data.error_code : '?') };
     } catch (e) {
       return { error: e.message };
     }
