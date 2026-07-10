@@ -626,12 +626,45 @@ class ZaloScanner {
   // ===== SCRAPE TRANG TONG HOP LINK =====
   async _crawlLinkSites() {
     const sites = [
+      // Trang quoc te
       { name: 'whtspgrouplink', url: 'https://whtspgrouplink.com/zalo-group-links/' },
+
+      // vinazalo.vn - hang nghin link
       { name: 'vinazalo-sinhvien', url: 'https://vinazalo.vn/tong-hop-danh-sach-100-nhom-zalo-sinh-vien-khap-ca-nuoc/' },
       { name: 'vinazalo-vieclam', url: 'https://vinazalo.vn/danh-sach-100-nhom-zalo-viec-lam-tang-co-hoi-tim-kiem-cong-viec/' },
+      { name: 'vinazalo-doanhnhan', url: 'https://vinazalo.vn/danh-sach-50-link-nhom-zalo-doanh-nhan-toan-quoc/' },
+      { name: 'vinazalo-cokhi', url: 'https://vinazalo.vn/danh-sach-100-link-nhom-zalo-co-khi-toan-quoc/' },
+      { name: 'vinazalo-nhathuoc', url: 'https://vinazalo.vn/danh-sach-100-link-nhom-zalo-nha-thuoc-mua-ban-va-trao-doi/' },
+      { name: 'vinazalo-hcm', url: 'https://vinazalo.vn/tong-hop-250-link-nhom-zalo-ho-chi-minh-moi-nhat/' },
+      { name: 'vinazalo-thanhhoa', url: 'https://vinazalo.vn/danh-sach-360-link-nhom-zalo-thanh-hoa-moi-nganh-nghe/' },
+      { name: 'vinazalo-daklak', url: 'https://vinazalo.vn/danh-sach-100-link-nhom-zalo-dak-lak-moi-nhat/' },
+      { name: 'vinazalo-ninhbinh', url: 'https://vinazalo.vn/danh-sach-200-link-nhom-zalo-ninh-binh-moi-linh-vuc/' },
+      { name: 'vinazalo-maybay', url: 'https://vinazalo.vn/danh-sach-50-link-nhom-zalo-may-bay-cua-cac-hang/' },
+      { name: 'vinazalo-gaixinh', url: 'https://vinazalo.vn/danh-sach-1000-link-nhom-zalo-gai-xinh-moi-nhat/' },
+      { name: 'vinazalo-phim', url: 'https://vinazalo.vn/tong-hop-danh-sach-50-link-nhom-zalo-phim-hot-nhat/' },
+
+      // vinazalo.com
+      { name: 'vinazalo2-vieclam', url: 'https://vinazalo.com/danh-sach-50-link-nhom-zalo-tim-viec-tren-toan-quoc/' },
+      { name: 'vinazalo2-hue', url: 'https://vinazalo.com/danh-sach-200-link-nhom-zalo-hue-tat-ca-cac-nganh-nghe/' },
+      { name: 'vinazalo2-bachhoa', url: 'https://vinazalo.com/danh-sach-500-link-nhom-zalo-bach-hoa-xanh-toan-quoc/' },
+      { name: 'vinazalo2-mmo', url: 'https://vinazalo.com/danh-sach-100-link-nhom-zalo-mmo-kiem-tien-online/' },
+      { name: 'vinazalo2-nhac', url: 'https://vinazalo.com/danh-sach-50-link-nhom-zalo-nhac-lot-giao-luu-am-nhac/' },
+      { name: 'vinazalo2-quangninh', url: 'https://vinazalo.com/tong-hop-danh-sach-100-link-nhom-zalo-quang-ninh-moi-nhat/' },
+      { name: 'vinazalo2-thuenha', url: 'https://vinazalo.com/tong-hop-danh-sach-50-link-nhom-zalo-thue-nha-tren-toan-quoc/' },
+
+      // Trang khac
+      { name: 'ship4p', url: 'https://ship4p.com/nhom-zalo-ban-hang/' },
+      { name: 'phanmemninja', url: 'https://www.phanmemninja.com/nhom-ban-hang-online-zalo' },
+      { name: 'phanmemninja2', url: 'https://www.phanmemninja.com/group-zalo-ban-hang-chat-luong-theo-tung-chu-de' },
+      { name: 'phanmemninja3', url: 'https://www.phanmemninja.com/cach-tim-nhom-tren-zalo' },
       { name: 'balico', url: 'https://balico.com.vn/cach-tim-nhom-tren-zalo-chua-tham-gia/' },
       { name: 'cellphones', url: 'https://cellphones.com.vn/sforum/tim-nhom-chat-zalo' },
       { name: 'mytour', url: 'https://mytour.vn/en/blog/bai-viet/how-to-create-and-find-zalo-groups-using-group-codes.html' },
+      { name: 'lamchame', url: 'https://www.lamchame.com/forum/threads/mach-ban-101-link-nhom-zalo-ban-hang-online-tuyet-dinh.2653449/' },
+      { name: 'vnseo', url: 'https://vnseo.edu.vn/threads/danh-sach-50-link-nhom-zalo-nhac-lot-giao-luu-am-nhac.567959.html' },
+      { name: 'congdongketoan', url: 'https://congdongketoan.vn/threads/tim-kiem-nhom-zalo-chuyen-nghiep-cach-san-nhom-dung-tep-khach-hang.86952/' },
+      { name: 'tinhte', url: 'https://tinhte.vn/thread/huong-dan-tim-nhom-tren-zalo-theo-tu-khoa-linh-vuc.4039021/' },
+      { name: 'webtretho', url: 'https://www.webtretho.vn/f/kinh-nghiem-hay-huu-ich/cach-tim-nhom-zalo-theo-tu-khoa-hieu-qua-voi-tool-tu-dong' },
     ];
 
     for (const site of sites) {
