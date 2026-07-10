@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { authMiddleware } = require('../services/auth');
 const { ZaloScanner } = require('../services/zalo-scanner');
+const { ZaloLogin } = require('../services/zalo-login');
 
 const scanner = new ZaloScanner();
+const zaloLogin = new ZaloLogin();
 
 router.use(authMiddleware);
 
@@ -71,7 +73,7 @@ router.get('/check-ip', async (req, res) => {
   res.json(result);
 });
 
-// Zalo login (cookie)
+// Zalo login (cookie thu cong)
 router.post('/zalo-login', (req, res) => {
   const { cookie, imei } = req.body;
   if (!cookie) {
@@ -83,6 +85,27 @@ router.post('/zalo-login', (req, res) => {
 
 router.delete('/zalo-login', (req, res) => {
   scanner.setZaloCredentials(null);
+  res.json({ ok: true });
+});
+
+// Zalo QR login (tu dong)
+router.post('/zalo-qr-start', async (req, res) => {
+  res.json({ ok: true, message: 'Dang tao QR...' });
+  zaloLogin.startLogin().catch(e => console.error('QR login loi:', e.message));
+});
+
+router.get('/zalo-qr-status', (req, res) => {
+  const status = zaloLogin.getStatus();
+  if (status.status === 'logged_in') {
+    const cookie = zaloLogin.getCookieString();
+    const localData = zaloLogin.getLocalData();
+    scanner.setZaloCredentials({ cookie, imei: localData.imei || 'browser' });
+  }
+  res.json(status);
+});
+
+router.post('/zalo-qr-cancel', async (req, res) => {
+  await zaloLogin.cleanup();
   res.json({ ok: true });
 });
 

@@ -15,7 +15,8 @@
     "uuid": "^9.0.0",
     "axios": "^1.7.0",
     "https-proxy-agent": "^7.0.0",
-    "http-proxy-agent": "^7.0.0"
+    "http-proxy-agent": "^7.0.0",
+    "puppeteer": "^23.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

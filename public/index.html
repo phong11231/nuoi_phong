@@ -498,12 +498,16 @@
         <!-- Zalo Cookie -->
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
           <h3 style="font-size:15px;margin:0 0 10px">Dang nhap Zalo</h3>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input type="text" id="zaloCookie" placeholder="Dan cookie Zalo vao day..." style="flex:1;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none">
-            <button class="btn btn-green btn-sm" onclick="saveZaloCookie()">Luu</button>
-            <button class="btn btn-outline btn-sm" onclick="clearZaloCookie()">Xoa</button>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <button class="btn btn-green btn-sm" id="btnZaloLogin" onclick="startZaloQR()">Dang nhap (QR)</button>
+            <button class="btn btn-red btn-sm" id="btnZaloCancel" onclick="cancelZaloQR()" style="display:none">Huy</button>
+            <button class="btn btn-outline btn-sm" id="btnZaloLogout" onclick="clearZaloCookie()" style="display:none">Dang xuat</button>
           </div>
-          <div id="zaloLoginStatus" style="font-size:12px;margin-top:6px;color:var(--text2)">Chua dang nhap</div>
+          <div id="zaloLoginStatus" style="font-size:12px;color:var(--text2)">Chua dang nhap</div>
+          <div id="zaloQRWrap" style="display:none;margin-top:10px;text-align:center">
+            <img id="zaloQRImg" style="max-width:200px;border-radius:8px;border:2px solid var(--border)">
+            <div style="font-size:11px;color:var(--text2);margin-top:6px">Mo Zalo tren dien thoai → Quet ma QR nay</div>
+          </div>
         </div>
         <!-- Proxy -->
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
@@ -1051,27 +1055,73 @@
       loadAllStats();
     }
 
-    // --- Zalo Cookie ---
-    async function saveZaloCookie() {
-      var cookie = document.getElementById('zaloCookie').value.trim();
-      if (!cookie) return alert('Nhap cookie Zalo');
+    // --- Zalo QR Login ---
+    var qrPollInterval = null;
+
+    async function startZaloQR() {
+      document.getElementById('btnZaloLogin').style.display = 'none';
+      document.getElementById('btnZaloCancel').style.display = '';
+      document.getElementById('zaloLoginStatus').textContent = 'Dang tao QR...';
+      document.getElementById('zaloLoginStatus').style.color = 'var(--orange)';
+
+      await fetch(API + '/api/zalo-scan/zalo-qr-start', { method: 'POST', headers: headers() });
+
+      if (qrPollInterval) clearInterval(qrPollInterval);
+      qrPollInterval = setInterval(pollZaloQR, 2000);
+    }
+
+    async function pollZaloQR() {
       try {
-        var res = await fetch(API + '/api/zalo-scan/zalo-login', {
-          method: 'POST', headers: headers(),
-          body: JSON.stringify({ cookie: cookie })
-        });
+        var res = await fetch(API + '/api/zalo-scan/zalo-qr-status', { headers: headers() });
         var data = await res.json();
-        if (data.error) return alert(data.error);
-        document.getElementById('zaloLoginStatus').textContent = 'Da dang nhap';
-        document.getElementById('zaloLoginStatus').style.color = 'var(--green)';
-      } catch (e) { alert('Loi'); }
+
+        if (data.status === 'qr_ready' && data.qrImage) {
+          document.getElementById('zaloQRWrap').style.display = '';
+          document.getElementById('zaloQRImg').src = 'data:image/png;base64,' + data.qrImage;
+          document.getElementById('zaloLoginStatus').textContent = 'Quet QR bang Zalo tren dien thoai...';
+          document.getElementById('zaloLoginStatus').style.color = 'var(--orange)';
+        }
+
+        if (data.status === 'logged_in') {
+          clearInterval(qrPollInterval); qrPollInterval = null;
+          document.getElementById('zaloQRWrap').style.display = 'none';
+          document.getElementById('zaloLoginStatus').textContent = 'Da dang nhap thanh cong!';
+          document.getElementById('zaloLoginStatus').style.color = 'var(--green)';
+          document.getElementById('btnZaloCancel').style.display = 'none';
+          document.getElementById('btnZaloLogout').style.display = '';
+        }
+
+        if (data.status === 'error') {
+          clearInterval(qrPollInterval); qrPollInterval = null;
+          document.getElementById('zaloQRWrap').style.display = 'none';
+          document.getElementById('zaloLoginStatus').textContent = 'Loi: ' + (data.error || 'Khong ro');
+          document.getElementById('zaloLoginStatus').style.color = 'var(--red)';
+          document.getElementById('btnZaloLogin').style.display = '';
+          document.getElementById('btnZaloCancel').style.display = 'none';
+        }
+
+        if (data.status === 'idle') {
+          clearInterval(qrPollInterval); qrPollInterval = null;
+        }
+      } catch (e) {}
+    }
+
+    async function cancelZaloQR() {
+      if (qrPollInterval) { clearInterval(qrPollInterval); qrPollInterval = null; }
+      await fetch(API + '/api/zalo-scan/zalo-qr-cancel', { method: 'POST', headers: headers() });
+      document.getElementById('zaloQRWrap').style.display = 'none';
+      document.getElementById('btnZaloLogin').style.display = '';
+      document.getElementById('btnZaloCancel').style.display = 'none';
+      document.getElementById('zaloLoginStatus').textContent = 'Chua dang nhap';
+      document.getElementById('zaloLoginStatus').style.color = 'var(--text2)';
     }
 
     async function clearZaloCookie() {
       await fetch(API + '/api/zalo-scan/zalo-login', { method: 'DELETE', headers: headers() });
-      document.getElementById('zaloCookie').value = '';
       document.getElementById('zaloLoginStatus').textContent = 'Chua dang nhap';
       document.getElementById('zaloLoginStatus').style.color = 'var(--text2)';
+      document.getElementById('btnZaloLogout').style.display = 'none';
+      document.getElementById('btnZaloLogin').style.display = '';
     }
 
     // --- Proxy ---
