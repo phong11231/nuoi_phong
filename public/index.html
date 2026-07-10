@@ -90,6 +90,17 @@
 
     .login-error { color: var(--red); font-size: 13px; text-align: center; margin-top: 12px; display: none; }
 
+    .scan-table-wrap { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px }
+    .scan-table-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px }
+    .scan-table-header h3 { font-size:15px }
+    .scan-table-header .badge { background:var(--primary);color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600 }
+    .scan-table { width:100%;border-collapse:collapse;font-size:13px }
+    .scan-table th { text-align:left;padding:8px 12px;border-bottom:2px solid var(--border);color:var(--text2);font-size:12px;text-transform:uppercase }
+    .scan-table td { padding:8px 12px;border-bottom:1px solid var(--border) }
+    .scan-table tr:hover { background:var(--surface2) }
+    .scan-table a { color:var(--primary);text-decoration:none }
+    .scan-table a:hover { text-decoration:underline }
+
     #dashboardPage { display: none; }
 
     .topbar {
@@ -412,6 +423,8 @@
     <div class="topbar">
       <h1>Phone Manager</h1>
       <div class="topbar-right">
+        <button class="btn btn-primary btn-sm" id="btnNavScan" onclick="showScanPage()">Do nhom Zalo</button>
+        <button class="btn btn-outline btn-sm" id="btnNavPhone" onclick="showPhonePage()" style="display:none">Phone Manager</button>
         <span id="userLabel" style="font-size:13px;color:var(--text2)"></span>
         <button class="btn btn-outline btn-sm" onclick="doLogout()">Dang xuat</button>
       </div>
@@ -466,6 +479,56 @@
     </div>
 
     <div class="phone-grid" id="phoneGrid"></div>
+  </div>
+
+  <!-- SCAN PAGE -->
+  <div id="scanPage" style="display:none">
+    <div class="topbar">
+      <h1>Do nhom Zalo</h1>
+      <div class="topbar-right">
+        <button class="btn btn-outline btn-sm" onclick="showPhonePage()">Phone Manager</button>
+        <span id="userLabel2" style="font-size:13px;color:var(--text2)"></span>
+        <button class="btn btn-outline btn-sm" onclick="doLogout()">Dang xuat</button>
+      </div>
+    </div>
+
+    <div style="padding:24px">
+      <!-- Input keywords -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px">
+        <h3 style="margin-bottom:12px;font-size:16px">Tu khoa tim kiem</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+          <div style="flex:1;min-width:300px">
+            <input type="text" id="scanKeywords" placeholder="Nhap tu khoa, cach nhau boi dau phay. VD: 2k10, toan, IELTS, ly hoa" style="width:100%;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none">
+          </div>
+          <button class="btn btn-green" id="btnStartScan" onclick="startScan()">Bat dau quet</button>
+          <button class="btn btn-red" id="btnStopScan" onclick="stopScan()" style="display:none">Dung</button>
+          <button class="btn btn-outline" onclick="clearScan()">Xoa ket qua</button>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px">
+        <div class="stat-card">
+          <div class="label">Trang thai</div>
+          <div class="value" id="scanStatus" style="font-size:16px;color:var(--green)">Cho</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Google da quet</div>
+          <div class="value" id="scanGoogle" style="font-size:22px">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Brute-force da quet</div>
+          <div class="value" id="scanBrute" style="font-size:22px">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Nhom tim duoc</div>
+          <div class="value green" id="scanFound" style="font-size:22px">0</div>
+        </div>
+      </div>
+
+      <!-- Results per keyword -->
+      <div id="scanResults"></div>
+    </div>
   </div>
 
   <!-- TASKBAR -->
@@ -939,6 +1002,164 @@
     // ========== MODAL ==========
     function openCreateModal() { document.getElementById('createModal').classList.add('active'); }
     function closeCreateModal() { document.getElementById('createModal').classList.remove('active'); }
+
+    // ========== SCAN PAGE ==========
+    let scanInterval = null;
+
+    function showScanPage() {
+      document.getElementById('dashboardPage').style.display = 'none';
+      document.getElementById('scanPage').style.display = 'block';
+      document.getElementById('btnNavScan').style.display = 'none';
+      document.getElementById('btnNavPhone').style.display = '';
+      document.getElementById('userLabel2').textContent = 'Admin';
+      loadScanStatus();
+      if (!scanInterval) scanInterval = setInterval(loadScanStatus, 2000);
+    }
+
+    function showPhonePage() {
+      document.getElementById('scanPage').style.display = 'none';
+      document.getElementById('dashboardPage').style.display = 'block';
+      document.getElementById('btnNavScan').style.display = '';
+      document.getElementById('btnNavPhone').style.display = 'none';
+      if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
+      loadFolder();
+      loadAllStats();
+    }
+
+    async function startScan() {
+      var input = document.getElementById('scanKeywords').value.trim();
+      if (!input) return alert('Nhap tu khoa truoc');
+      var keywords = input.split(',').map(function(k) { return k.trim(); }).filter(Boolean);
+      if (!keywords.length) return alert('Nhap tu khoa truoc');
+
+      try {
+        var res = await fetch(API + '/api/zalo-scan/start', {
+          method: 'POST', headers: headers(),
+          body: JSON.stringify({ keywords: keywords })
+        });
+        var data = await res.json();
+        if (data.error) return alert(data.error);
+        document.getElementById('btnStartScan').style.display = 'none';
+        document.getElementById('btnStopScan').style.display = '';
+      } catch (e) { alert('Loi ket noi server'); }
+    }
+
+    async function stopScan() {
+      await fetch(API + '/api/zalo-scan/stop', { method: 'POST', headers: headers() });
+      document.getElementById('btnStartScan').style.display = '';
+      document.getElementById('btnStopScan').style.display = 'none';
+    }
+
+    async function clearScan() {
+      if (!confirm('Xoa het ket qua?')) return;
+      await fetch(API + '/api/zalo-scan/clear', { method: 'POST', headers: headers() });
+      loadScanStatus();
+    }
+
+    async function loadScanStatus() {
+      try {
+        var res = await fetch(API + '/api/zalo-scan/status', { headers: headers() });
+        if (res.status === 401) return;
+        var s = await res.json();
+
+        document.getElementById('scanStatus').textContent = s.running ? s.currentSource || 'Dang quet...' : 'Cho';
+        document.getElementById('scanStatus').style.color = s.running ? 'var(--orange)' : 'var(--green)';
+        document.getElementById('scanGoogle').textContent = (s.stats.googleChecked || 0).toLocaleString();
+        document.getElementById('scanBrute').textContent = (s.stats.bruteChecked || 0).toLocaleString();
+        document.getElementById('scanFound').textContent = (s.stats.found || 0).toLocaleString();
+
+        if (s.running) {
+          document.getElementById('btnStartScan').style.display = 'none';
+          document.getElementById('btnStopScan').style.display = '';
+        } else {
+          document.getElementById('btnStartScan').style.display = '';
+          document.getElementById('btnStopScan').style.display = 'none';
+        }
+
+        // Load results
+        var res2 = await fetch(API + '/api/zalo-scan/results', { headers: headers() });
+        var data = await res2.json();
+        renderScanResults(data, s.keywords);
+      } catch (e) {}
+    }
+
+    function renderScanResults(data, keywords) {
+      var el = document.getElementById('scanResults');
+      if (!data.total && (!keywords || !keywords.length)) {
+        el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:40px">Chua co ket qua. Nhap tu khoa va bam "Bat dau quet".</div>';
+        return;
+      }
+
+      var html = '';
+
+      // Bang cho tung keyword
+      var kws = keywords && keywords.length ? keywords : Object.keys(data.grouped || {});
+      for (var i = 0; i < kws.length; i++) {
+        var kw = kws[i];
+        var items = (data.grouped && data.grouped[kw]) || [];
+        html += '<div class="scan-table-wrap">';
+        html += '<div class="scan-table-header">';
+        html += '<div style="display:flex;align-items:center;gap:10px"><h3>Tu khoa: "' + esc(kw) + '"</h3><span class="badge">' + items.length + ' nhom</span></div>';
+        html += '<button class="btn btn-green btn-sm" onclick="exportExcel(\'' + esc(kw).replace(/'/g, "\\'") + '\')">Xuat Excel</button>';
+        html += '</div>';
+
+        if (items.length === 0) {
+          html += '<div style="color:var(--text2);font-size:13px;padding:12px 0">Chua tim thay nhom nao phu hop.</div>';
+        } else {
+          html += '<div style="overflow-x:auto"><table class="scan-table"><thead><tr><th style="width:40px">#</th><th>Ten nhom</th><th>Link</th><th>Nguon</th></tr></thead><tbody>';
+          for (var j = 0; j < items.length; j++) {
+            var r = items[j];
+            html += '<tr><td>' + (j + 1) + '</td>';
+            html += '<td>' + esc(r.name) + '</td>';
+            html += '<td><a href="' + esc(r.link) + '" target="_blank">' + esc(r.link) + '</a></td>';
+            html += '<td>' + esc(r.source) + '</td></tr>';
+          }
+          html += '</tbody></table></div>';
+        }
+        html += '</div>';
+      }
+
+      // Bang tat ca (khong khop keyword)
+      if (data.all && data.all.length > 0) {
+        var matchedLinks = {};
+        for (var k in (data.grouped || {})) {
+          var grp = data.grouped[k];
+          for (var m = 0; m < grp.length; m++) matchedLinks[grp[m].link] = true;
+        }
+        var others = data.all.filter(function(r) { return !matchedLinks[r.link]; });
+        if (others.length > 0) {
+          html += '<div class="scan-table-wrap">';
+          html += '<div class="scan-table-header"><div style="display:flex;align-items:center;gap:10px"><h3>Nhom khac (khong khop keyword)</h3><span class="badge">' + others.length + ' nhom</span></div>';
+          html += '<button class="btn btn-green btn-sm" onclick="exportExcel(\'\')">Xuat Excel tat ca</button></div>';
+          html += '<div style="overflow-x:auto"><table class="scan-table"><thead><tr><th style="width:40px">#</th><th>Ten nhom</th><th>Link</th><th>Nguon</th></tr></thead><tbody>';
+          for (var n = 0; n < Math.min(others.length, 200); n++) {
+            var o = others[n];
+            html += '<tr><td>' + (n + 1) + '</td><td>' + esc(o.name) + '</td><td><a href="' + esc(o.link) + '" target="_blank">' + esc(o.link) + '</a></td><td>' + esc(o.source) + '</td></tr>';
+          }
+          if (others.length > 200) html += '<tr><td colspan="4" style="color:var(--text2);text-align:center">... va ' + (others.length - 200) + ' nhom khac</td></tr>';
+          html += '</tbody></table></div></div>';
+        }
+      }
+
+      el.innerHTML = html;
+    }
+
+    function exportExcel(keyword) {
+      var url = API + '/api/zalo-scan/export?keyword=' + encodeURIComponent(keyword);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'nhom-zalo-' + (keyword || 'all') + '.csv';
+
+      // Fetch with auth header
+      fetch(url, { headers: headers() })
+        .then(function(res) { return res.blob(); })
+        .then(function(blob) {
+          var blobUrl = URL.createObjectURL(blob);
+          a.href = blobUrl;
+          a.click();
+          URL.revokeObjectURL(blobUrl);
+        });
+    }
 
     // ========== INIT ==========
     if (token) showDashboard();

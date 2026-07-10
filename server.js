@@ -6,6 +6,7 @@ const authRoutes = require('./routes/auth');
 const phoneRoutes = require('./routes/phones');
 const folderRoutes = require('./routes/folders');
 const scheduleRoutes = require('./routes/schedule');
+const zaloScanRoutes = require('./routes/zalo-scan');
 const { ScheduleManager } = require('./services/schedule-manager');
 
 const app = express();
@@ -19,6 +20,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/phones', phoneRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/schedule', scheduleRoutes);
+app.use('/api/zalo-scan', zaloScanRoutes);
 
 const os = require('os');
 const { authMiddleware } = require('./services/auth');
