@@ -155,9 +155,25 @@ class ZaloScanner {
     }
   }
 
-  _hasTriple(code) {
+  _isInvalidCode(code) {
     for (let i = 0; i < code.length - 2; i++) {
+      // Khong co 3 ky tu giong nhau lien tiep
       if (code[i] === code[i + 1] && code[i] === code[i + 2]) return true;
+      // Khong co 3 so lien tiep
+      if (/\d/.test(code[i]) && /\d/.test(code[i + 1]) && /\d/.test(code[i + 2])) return true;
+    }
+    for (let i = 0; i < code.length - 1; i++) {
+      const a = code.charCodeAt(i);
+      const b = code.charCodeAt(i + 1);
+      // 2 ky tu lien tiep khong duoc ke nhau trong bang chu cai/so (chenh 1)
+      if (Math.abs(a - b) === 1) {
+        // Ca 2 deu la chu hoac ca 2 deu la so
+        const aIsLetter = code[i] >= 'a' && code[i] <= 'z';
+        const bIsLetter = code[i + 1] >= 'a' && code[i + 1] <= 'z';
+        const aIsDigit = code[i] >= '0' && code[i] <= '9';
+        const bIsDigit = code[i + 1] >= '0' && code[i + 1] <= '9';
+        if ((aIsLetter && bIsLetter) || (aIsDigit && bIsDigit)) return true;
+      }
     }
     return false;
   }
@@ -170,7 +186,7 @@ class ZaloScanner {
       }
 
       let code = this._randomCode(workerId);
-      while (this._hasTriple(code)) {
+      while (this._isInvalidCode(code)) {
         code = this._randomCode(workerId);
       }
 
