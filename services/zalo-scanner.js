@@ -773,7 +773,218 @@ class ZaloScanner {
     }
   }
 
-  // Crawl tat ca nguon (khong can cookie)
+  // ===== COMMON CRAWL =====
+  async _crawlCommonCrawl() {
+    this.currentSource = 'Common Crawl...';
+    console.log('[Crawl] Common Crawl: tim tat ca zalo.me/g/* trong database...');
+
+    // Lay danh sach index moi nhat
+    const indexes = ['CC-MAIN-2026-26', 'CC-MAIN-2026-22', 'CC-MAIN-2026-18', 'CC-MAIN-2026-13',
+                     'CC-MAIN-2025-51', 'CC-MAIN-2025-46', 'CC-MAIN-2025-40', 'CC-MAIN-2025-34',
+                     'CC-MAIN-2025-29', 'CC-MAIN-2025-22', 'CC-MAIN-2025-18', 'CC-MAIN-2025-13',
+                     'CC-MAIN-2024-51', 'CC-MAIN-2024-46', 'CC-MAIN-2024-42', 'CC-MAIN-2024-38',
+                     'CC-MAIN-2024-33', 'CC-MAIN-2024-30', 'CC-MAIN-2024-26', 'CC-MAIN-2024-22'];
+
+    for (const idx of indexes) {
+      if (this._stopFlag) return;
+      try {
+        const config = this._getAxiosConfig(30000);
+        const url = `https://index.commoncrawl.org/${idx}-index?url=zalo.me/g/*&output=json&limit=5000`;
+        console.log(`[Crawl] Common Crawl: ${idx}...`);
+        this.currentSource = `Common Crawl: ${idx}`;
+
+        const res = await axios.get(url, config);
+        const lines = res.data.split('\n').filter(l => l.trim());
+        let found = 0;
+
+        for (const line of lines) {
+          try {
+            const obj = JSON.parse(line);
+            if (obj.url) {
+              const m = obj.url.match(/zalo\.me\/g\/([a-zA-Z0-9]{5,25})/);
+              if (m) {
+                const code = m[1];
+                const link = `https://zalo.me/g/${code}`;
+                if (!this.results.find(r => r.link === link)) {
+                  this.results.push({ name: '(CommonCrawl)', link, source: 'CommonCrawl', foundAt: Date.now() });
+                  this.stats.found = this.results.length;
+                  found++;
+                }
+              }
+            }
+          } catch (e) {}
+        }
+        console.log(`[Crawl] Common Crawl ${idx}: +${found} link moi`);
+        await this._sleep(1000);
+      } catch (e) {
+        console.log(`[Crawl] Common Crawl ${idx} loi: ${e.message}`);
+      }
+    }
+  }
+
+  // ===== WAYBACK MACHINE =====
+  async _crawlWayback() {
+    this.currentSource = 'Wayback Machine...';
+    console.log('[Crawl] Wayback Machine: tim tat ca zalo.me/g/*...');
+
+    try {
+      const config = this._getAxiosConfig(60000);
+      const url = 'https://web.archive.org/cdx/search/cdx?url=zalo.me/g/*&output=json&fl=original&collapse=urlkey&limit=10000';
+      const res = await axios.get(url, config);
+
+      let data = res.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch (e) { data = []; }
+      }
+
+      let found = 0;
+      for (const row of data) {
+        if (this._stopFlag) return;
+        const urlStr = Array.isArray(row) ? row[0] : row;
+        if (!urlStr || urlStr === 'original') continue;
+
+        const m = urlStr.match(/zalo\.me\/g\/([a-zA-Z0-9]{5,25})/);
+        if (m) {
+          const code = m[1];
+          const link = `https://zalo.me/g/${code}`;
+          if (!this.results.find(r => r.link === link)) {
+            this.results.push({ name: '(Wayback)', link, source: 'Wayback', foundAt: Date.now() });
+            this.stats.found = this.results.length;
+            found++;
+          }
+        }
+      }
+      console.log(`[Crawl] Wayback Machine: +${found} link moi`);
+    } catch (e) {
+      console.log(`[Crawl] Wayback Machine loi: ${e.message}`);
+    }
+  }
+
+  // ===== FACEBOOK SCRAPE =====
+  async _crawlFacebook(keyword) {
+    this.currentSource = `Facebook: "${keyword}"`;
+    console.log(`[Crawl] Facebook: tim "zalo.me/g/ ${keyword}"...`);
+
+    const queries = [
+      `zalo.me/g/ ${keyword}`,
+      `link nhóm zalo ${keyword}`,
+      `nhóm zalo ${keyword} zalo.me`,
+    ];
+
+    for (const q of queries) {
+      if (this._stopFlag) return;
+      try {
+        const config = this._getAxiosConfig(15000);
+        config.headers = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          'Accept': 'text/html',
+          'Accept-Language': 'vi-VN,vi;q=0.9',
+        };
+
+        // Facebook mobile search (de crawl hon)
+        const url = `https://mbasic.facebook.com/search/posts/?q=${encodeURIComponent(q)}`;
+        const res = await axios.get(url, config);
+        await this._extractZaloLinks(res.data, 'Facebook');
+        await this._sleep(5000);
+      } catch (e) {
+        console.log(`[Crawl] Facebook loi: ${e.message}`);
+      }
+    }
+
+    // Crawl cac Facebook group da biet co link Zalo
+    const fbGroups = [
+      'https://mbasic.facebook.com/groups/533980071303924/',  // Nhom zalo link
+      'https://mbasic.facebook.com/groups/2759243284406067/', // LINK ZALO
+    ];
+
+    for (const groupUrl of fbGroups) {
+      if (this._stopFlag) return;
+      try {
+        const config = this._getAxiosConfig(15000);
+        config.headers = {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+          'Accept': 'text/html',
+        };
+        const res = await axios.get(groupUrl, config);
+        await this._extractZaloLinks(res.data, 'Facebook-Group');
+        await this._sleep(3000);
+      } catch (e) {
+        console.log(`[Crawl] FB Group loi: ${e.message}`);
+      }
+    }
+  }
+
+  // ===== THREADS SCRAPE =====
+  async _crawlThreads(keyword) {
+    this.currentSource = `Threads: "${keyword}"`;
+    console.log(`[Crawl] Threads: tim "zalo.me/g/ ${keyword}"...`);
+
+    const queries = [
+      `zalo.me/g/ ${keyword}`,
+      `nhóm zalo ${keyword}`,
+      `link zalo ${keyword}`,
+    ];
+
+    for (const q of queries) {
+      if (this._stopFlag) return;
+      try {
+        const config = this._getAxiosConfig(15000);
+        config.headers = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          'Accept': 'text/html',
+        };
+        const url = `https://www.threads.net/search?q=${encodeURIComponent(q)}&serp_type=default`;
+        const res = await axios.get(url, config);
+        await this._extractZaloLinks(res.data, 'Threads');
+        await this._sleep(3000);
+      } catch (e) {
+        console.log(`[Crawl] Threads loi: ${e.message}`);
+      }
+    }
+  }
+
+  // ===== VERIFY LINKS (lay ten nhom cho cac link chua co ten) =====
+  async _verifyUnnamedResults() {
+    const unnamed = this.results.filter(r => r.name.startsWith('('));
+    if (unnamed.length === 0) return;
+
+    console.log(`[Scanner] Verify ${unnamed.length} link chua co ten...`);
+    this.currentSource = `Verify: 0/${unnamed.length}`;
+
+    let verified = 0;
+    for (const r of unnamed) {
+      if (this._stopFlag) return;
+      const code = r.link.replace('https://zalo.me/g/', '');
+
+      if (this.zaloCredentials) {
+        try {
+          const info = await this._checkGroupLink(code);
+          if (info && info.name) {
+            r.name = info.name;
+            console.log(`[Verify] ${info.name} - ${r.link}`);
+          }
+        } catch (e) {
+          if (e.message && e.message.includes('blocked')) {
+            console.log('[Verify] Zalo block, doi 30s...');
+            await this._sleep(30000);
+          }
+        }
+      } else {
+        const name = await this._getGroupNameFromPage(code);
+        if (name && !name.includes('Đăng nhập')) {
+          r.name = name;
+        }
+      }
+
+      verified++;
+      if (verified % 10 === 0) {
+        this.currentSource = `Verify: ${verified}/${unnamed.length}`;
+      }
+      await this._sleep(300);
+    }
+  }
+
+  // Crawl tat ca nguon SONG SONG
   async startCrawl(keywords) {
     if (this.running) return;
     this.keywords = keywords;
@@ -782,21 +993,32 @@ class ZaloScanner {
     this.stats.startTime = Date.now();
     this.stats.bruteChecked = 0;
 
-    console.log('[Scanner] Bat dau crawl da nguon...');
+    console.log('[Scanner] Bat dau crawl da nguon (song song)...');
 
-    // 1. Scrape trang tong hop link (khong can keyword)
-    await this._crawlLinkSites();
+    // Chay TAT CA song song
+    const tasks = [
+      // Nguon lon (khong can keyword)
+      this._crawlCommonCrawl(),
+      this._crawlWayback(),
+      this._crawlLinkSites(),
 
-    // 2. Crawl search engines theo keyword
-    for (const kw of keywords) {
-      if (this._stopFlag) break;
-      console.log(`[Scanner] Crawl keyword: "${kw}"`);
+      // Search engines + Facebook + Threads (theo keyword)
+      ...keywords.flatMap(kw => [
+        this._crawlBing(kw),
+        this._crawlDuckDuckGo(kw),
+        this._crawlYandex(kw),
+        this._crawlGoogle(kw),
+        this._crawlShareSites(kw),
+        this._crawlFacebook(kw),
+        this._crawlThreads(kw),
+      ]),
+    ];
 
-      await this._crawlBing(kw);
-      await this._crawlDuckDuckGo(kw);
-      await this._crawlYandex(kw);
-      await this._crawlGoogle(kw);
-      await this._crawlShareSites(kw);
+    await Promise.allSettled(tasks);
+
+    // Sau khi crawl xong, verify ten nhom cho cac link chua co ten
+    if (!this._stopFlag) {
+      await this._verifyUnnamedResults();
     }
 
     this.running = false;
