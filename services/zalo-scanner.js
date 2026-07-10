@@ -97,31 +97,24 @@ class ZaloScanner {
   async startGoogleCrawl(keywords) {
     this.mode.google = true;
 
-    // 1. Google search voi nhieu query
+    // 1. Google Custom Search API (chinh, khong bi block)
+    const API_KEY = process.env.GOOGLE_API_KEY || 'AIzaSyC24PKKj0kIq_3BRdN7yWwTFLR4LkaxeM4';
+    const CX = process.env.GOOGLE_CX || 'a6c83666cb79f4d9f';
+
     for (const kw of keywords) {
       if (this._stopFlag) break;
-      await this._searchEngine('Google', kw);
-      await this._sleep(2000);
+      await this._searchGoogleAPI(kw, API_KEY, CX);
+      await this._sleep(1000);
     }
 
-    // 2. Bing search
-    for (const kw of keywords) {
-      if (this._stopFlag) break;
-      await this._searchBing(kw);
-      await this._sleep(2000);
-    }
-
-    // 3. Crawl trang tong hop
+    // 2. Crawl trang tong hop (backup)
     const staticSources = [
       { name: 'keomemzalo.com', urls: [
         'https://keomemzalo.com/1000-danh-sach-link-nhom-zalo-theo-linh-vuc-nganh-nghe-moi-nhat/',
         'https://keomemzalo.com/danh-sach-100-link-nhom-zalo-cho-ban-hang-tuong-tac-cao/',
       ]},
-      { name: 'phanmemzalo.vn', urls: ['https://phanmemzalo.vn/link-nhom-zalo-kin/'] },
       { name: 'lamhoang.edu.vn', urls: ['https://lamhoang.edu.vn/nhom-zalo/'] },
-      { name: 'nhomkinzalo.com', urls: ['https://nhomkinzalo.com/'] },
       { name: 'ship4p.com', urls: ['https://ship4p.com/nhom-zalo-ban-hang/'] },
-      { name: 'whtspgrouplink', urls: ['https://whtspgrouplink.com/zalo-group-links/'] },
     ];
 
     for (const src of staticSources) {
@@ -138,180 +131,70 @@ class ZaloScanner {
       }
     }
 
-    // 4. Tim tren forum VN
-    for (const kw of keywords) {
-      if (this._stopFlag) break;
-      await this._searchForums(kw);
-      await this._sleep(2000);
-    }
-
     this.mode.google = false;
     if (!this.mode.bruteforce) this.currentSource = '';
   }
 
-  async _searchEngine(engine, keyword) {
+  async _searchGoogleAPI(keyword, apiKey, cx) {
     const queries = [
-      `"zalo.me/g/" "${keyword}"`,
-      `"zalo.me/g/" nhom ${keyword}`,
-      `link nhom zalo "${keyword}" 2024 OR 2025 OR 2026`,
-      `"tham gia nhom" zalo "${keyword}"`,
-      `site:facebook.com "zalo.me/g/" "${keyword}"`,
+      `"zalo.me/g/" ${keyword}`,
+      `link nhom zalo ${keyword}`,
+      `nhom zalo ${keyword} 2024 2025`,
     ];
 
     for (const q of queries) {
       if (this._stopFlag) break;
-      this.currentSource = `Google: "${keyword}" (${this.stats.googleChecked})`;
-      try {
-        const url = `https://www.google.com/search?q=${encodeURIComponent(q)}&num=100&hl=vi`;
-        const res = await axios.get(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
-            'Accept': 'text/html,application/xhtml+xml',
-          },
-          timeout: 15000,
-          maxRedirects: 3,
-        });
+      // API tra ve toi da 10 ket qua/request, dung start de phan trang
+      for (let start = 1; start <= 91; start += 10) {
+        if (this._stopFlag) break;
+        this.currentSource = `Google API: "${keyword}" (trang ${Math.ceil(start/10)})`;
+        try {
+          const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(q)}&start=${start}&num=10&hl=vi`;
+          const res = await axios.get(url, { timeout: 15000 });
+          const data = res.data;
 
-        this._extractFromGoogle(res.data);
-      } catch (e) {
-        console.error(`Google search loi:`, e.message);
-      }
-      await this._sleep(3000 + Math.random() * 2000);
-    }
-  }
+          if (!data.items || data.items.length === 0) break;
 
-  async _searchBing(keyword) {
-    const queries = [
-      `"zalo.me/g/" "${keyword}"`,
-      `link nhom zalo "${keyword}"`,
-    ];
+          for (const item of data.items) {
+            const title = item.title || '';
+            const snippet = item.snippet || '';
+            const link = item.link || '';
+            const fullText = title + ' ' + snippet + ' ' + link;
 
-    for (const q of queries) {
-      if (this._stopFlag) break;
-      this.currentSource = `Bing: "${keyword}"`;
-      try {
-        const url = `https://www.bing.com/search?q=${encodeURIComponent(q)}&count=50`;
-        const res = await axios.get(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            'Accept-Language': 'vi-VN,vi;q=0.9',
-          },
-          timeout: 15000,
-        });
+            // Tim zalo.me/g/ link trong ket qua
+            const zaloRegex = /https?:\/\/zalo\.me\/g\/([a-z0-9]+)/gi;
+            let match;
+            while ((match = zaloRegex.exec(fullText)) !== null) {
+              this._addResult(title, match[0], 'Google API');
+              this.stats.googleChecked++;
+            }
 
-        this._extractFromSearchPage(res.data, 'Bing');
-      } catch (e) {}
-      await this._sleep(2000 + Math.random() * 1000);
-    }
-  }
+            // Neu link chinh la zalo.me/g/
+            if (link.includes('zalo.me/g/')) {
+              this._addResult(title, link, 'Google API');
+              this.stats.googleChecked++;
+            }
 
-  async _searchForums(keyword) {
-    const forumQueries = [
-      `site:tinhte.vn "zalo.me/g/" "${keyword}"`,
-      `site:voz.vn "zalo.me/g/" "${keyword}"`,
-      `site:facebook.com "zalo.me/g/" "${keyword}"`,
-      `site:congdongketoan.vn "zalo.me/g/" "${keyword}"`,
-    ];
-
-    for (const q of forumQueries) {
-      if (this._stopFlag) break;
-      this.currentSource = `Forum: "${keyword}"`;
-      try {
-        const url = `https://www.google.com/search?q=${encodeURIComponent(q)}&num=50&hl=vi`;
-        const res = await axios.get(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            'Accept-Language': 'vi-VN,vi;q=0.9',
-          },
-          timeout: 15000,
-        });
-        this._extractFromGoogle(res.data);
-      } catch (e) {}
-      await this._sleep(4000 + Math.random() * 2000);
-    }
-  }
-
-  _extractFromGoogle(html) {
-    const $ = cheerio.load(html);
-    const zaloLinkRegex = /https?:\/\/zalo\.me\/g\/([a-z0-9]+)/gi;
-
-    // Tim trong ket qua Google
-    $('div.g, div[data-hveid], div.tF2Cxc, div.MjjYud').each((_, el) => {
-      const block = $(el);
-      const blockHtml = block.html() || '';
-      const blockText = block.text() || '';
-
-      let match;
-      zaloLinkRegex.lastIndex = 0;
-      while ((match = zaloLinkRegex.exec(blockHtml)) !== null) {
-        const link = match[0];
-        // Lay ten tu title cua ket qua
-        let name = block.find('h3').first().text().trim();
-        if (!name) name = block.find('a').first().text().trim();
-        if (!name) {
-          // Lay snippet
-          name = block.find('.VwiC3b, .st, span[style]').first().text().trim();
-        }
-        this._addResult(name, link, 'Google');
-        this.stats.googleChecked++;
-      }
-    });
-
-    // Fallback: tim link trong toan bo HTML
-    let match;
-    zaloLinkRegex.lastIndex = 0;
-    while ((match = zaloLinkRegex.exec(html)) !== null) {
-      const link = match[0];
-      const idx = match.index;
-      const before = html.substring(Math.max(0, idx - 300), idx);
-      const after = html.substring(idx, Math.min(html.length, idx + 300));
-      const context = before + after;
-
-      const $ctx = cheerio.load(context);
-      let name = $ctx('h3').first().text().trim()
-        || $ctx('a').first().text().trim()
-        || $ctx('strong,b,em').first().text().trim();
-
-      if (!name || name.includes('zalo.me')) {
-        const textParts = context.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').split(/[.!?\n]/);
-        for (const part of textParts) {
-          const clean = part.trim();
-          if (clean.length >= 5 && clean.length <= 100 && !clean.includes('zalo.me') && !clean.includes('http')) {
-            name = clean;
-            break;
+            // Crawl trang ket qua de tim them link zalo
+            if (!link.includes('zalo.me') && (snippet.includes('zalo.me/g/') || title.toLowerCase().includes('nhom zalo') || title.toLowerCase().includes('link zalo'))) {
+              try {
+                await this._crawlPage(link, 'Google API → ' + new URL(link).hostname);
+              } catch (e) {}
+            }
           }
+
+          if (data.items.length < 10) break;
+        } catch (e) {
+          if (e.response && e.response.status === 429) {
+            console.error('Google API: het quota ngay hom nay (100 query/ngay)');
+            return;
+          }
+          console.error(`Google API loi:`, e.message);
+          break;
         }
+        await this._sleep(500);
       }
-
-      this._addResult(name, link, 'Google');
-      this.stats.googleChecked++;
-    }
-  }
-
-  _extractFromSearchPage(html, source) {
-    const zaloLinkRegex = /https?:\/\/zalo\.me\/g\/([a-z0-9]+)/gi;
-    const $ = cheerio.load(html);
-
-    $('li.b_algo, div.b_algo').each((_, el) => {
-      const block = $(el);
-      const blockHtml = block.html() || '';
-      let match;
-      zaloLinkRegex.lastIndex = 0;
-      while ((match = zaloLinkRegex.exec(blockHtml)) !== null) {
-        let name = block.find('h2 a, h2').first().text().trim();
-        if (!name) name = block.find('p').first().text().trim();
-        this._addResult(name, match[0], source);
-        this.stats.googleChecked++;
-      }
-    });
-
-    // Fallback
-    zaloLinkRegex.lastIndex = 0;
-    let match;
-    while ((match = zaloLinkRegex.exec(html)) !== null) {
-      this._addResult('', match[0], source);
-      this.stats.googleChecked++;
+      await this._sleep(1000);
     }
   }
 
