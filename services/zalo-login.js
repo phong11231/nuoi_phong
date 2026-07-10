@@ -93,6 +93,31 @@ class ZaloLogin {
     }
   }
 
+  async _switchToQRTab() {
+    if (!this.page) return;
+    try {
+      const clicked = await this.page.evaluate(() => {
+        // Tim tab/button chuyen sang QR
+        const els = document.querySelectorAll('button, a, div[role="button"], span, div[class*="tab"], div[class*="qr"], p');
+        for (const el of els) {
+          const txt = (el.textContent || '').trim().toLowerCase();
+          if (txt.includes('qr') || txt.includes('mã qr') || txt.includes('quét mã')) {
+            el.click();
+            return txt;
+          }
+        }
+        return null;
+      });
+      if (clicked) {
+        console.log('[QR] Da click tab QR:', clicked);
+      } else {
+        console.log('[QR] Khong tim thay tab QR, co the da hien san');
+      }
+    } catch (e) {
+      console.log('[QR] Loi switch tab:', e.message);
+    }
+  }
+
   async _captureQR() {
     if (!this.page) return null;
 
