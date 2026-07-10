@@ -1449,10 +1449,34 @@
 
       var html = '';
 
+      // Bang tat ca nhom tim duoc
+      var allItems = (data.grouped && data.grouped['_all']) || data.all || [];
+      html += '<div class="scan-table-wrap">';
+      html += '<div class="scan-table-header">';
+      html += '<div style="display:flex;align-items:center;gap:10px"><h3>Tat ca nhom tim duoc</h3><span class="badge" style="background:var(--green)">' + allItems.length + ' nhom</span></div>';
+      html += '<button class="btn btn-green btn-sm" onclick="exportExcel(\'\')">Xuat Excel</button>';
+      html += '</div>';
+
+      if (allItems.length === 0) {
+        html += '<div style="color:var(--text2);font-size:13px;padding:12px 0">Chua tim thay nhom nao. Dang quet...</div>';
+      } else {
+        html += '<div style="overflow-x:auto;max-height:400px;overflow-y:auto"><table class="scan-table"><thead><tr><th style="width:40px">#</th><th>Ten nhom</th><th>Link</th><th>Nguon</th></tr></thead><tbody>';
+        for (var j = 0; j < allItems.length; j++) {
+          var r = allItems[j];
+          html += '<tr><td>' + (j + 1) + '</td>';
+          html += '<td>' + esc(r.name) + '</td>';
+          html += '<td><a href="' + esc(r.link) + '" target="_blank">' + esc(r.link) + '</a></td>';
+          html += '<td>' + esc(r.source) + '</td></tr>';
+        }
+        html += '</tbody></table></div>';
+      }
+      html += '</div>';
+
       // Bang cho tung keyword
       var kws = keywords && keywords.length ? keywords : Object.keys(data.grouped || {});
       for (var i = 0; i < kws.length; i++) {
         var kw = kws[i];
+        if (kw === '_all') continue;
         var items = (data.grouped && data.grouped[kw]) || [];
         html += '<div class="scan-table-wrap">';
         html += '<div class="scan-table-header">';

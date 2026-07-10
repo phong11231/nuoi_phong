@@ -39,6 +39,7 @@ class ZaloScanner {
       const k = kw.toLowerCase().trim();
       grouped[kw] = this.results.filter(r => r.name.toLowerCase().includes(k));
     }
+    grouped['_all'] = this.results;
     return grouped;
   }
 
@@ -99,9 +100,6 @@ class ZaloScanner {
     name = this._cleanName(name);
     if (!name) return;
     link = link.split('?')[0].split('#')[0];
-    const nameLower = name.toLowerCase();
-    const matched = this.keywords.some(kw => nameLower.includes(kw.toLowerCase().trim()));
-    if (!matched) return;
     const exists = this.results.find(r => r.link === link);
     if (!exists) {
       this.results.push({ name, link, source, foundAt: Date.now() });
@@ -128,7 +126,7 @@ class ZaloScanner {
     this._lastSpeedCount = 0;
     this._blocked = false;
 
-    const CONCURRENCY = 50;
+    const CONCURRENCY = 200;
     const workers = [];
     for (let i = 0; i < CONCURRENCY; i++) {
       workers.push(this._bruteWorker(i));
