@@ -114,7 +114,7 @@ class ZaloScanner {
     this.zaloCredentials = credentials;
   }
 
-  // ===== BRUTE FORCE =====
+  // ===== BRUTE FORCE (song song) =====
   async startBruteforce() {
     if (!this.zaloCredentials) {
       console.error('Chua dang nhap Zalo');
@@ -126,11 +126,29 @@ class ZaloScanner {
     this.stats.startTime = Date.now();
     this._lastSpeedCheck = Date.now();
     this._lastSpeedCount = 0;
+    this._blocked = false;
 
+    const CONCURRENCY = 50;
+    const workers = [];
+    for (let i = 0; i < CONCURRENCY; i++) {
+      workers.push(this._bruteWorker(i));
+    }
+    await Promise.all(workers);
+
+    this.running = false;
+    this.currentSource = '';
+  }
+
+  async _bruteWorker(workerId) {
     const letters = 'abcdefghijklmnopqrstuvwxyz';
     const digits = '0123456789';
 
     while (!this._stopFlag) {
+      if (this._blocked) {
+        await this._sleep(5000);
+        continue;
+      }
+
       let code = '';
       for (let i = 0; i < 6; i++) code += letters[Math.floor(Math.random() * 26)];
       for (let i = 0; i < 3; i++) code += digits[Math.floor(Math.random() * 10)];
@@ -143,30 +161,24 @@ class ZaloScanner {
         }
       } catch (e) {
         if (e.message && e.message.includes('blocked')) {
-          console.error('Zalo block! Dung 30 giay...');
-          await this._sleep(30000);
+          if (!this._blocked) {
+            this._blocked = true;
+            console.error('Zalo block! Tat ca worker dung 30 giay...');
+            setTimeout(() => { this._blocked = false; }, 30000);
+          }
         }
       }
 
       this.stats.bruteChecked++;
 
-      // Tinh toc do moi 10 giay
       const now = Date.now();
       if (now - this._lastSpeedCheck >= 10000) {
         this.stats.speed = Math.round((this.stats.bruteChecked - this._lastSpeedCount) / ((now - this._lastSpeedCheck) / 1000));
         this._lastSpeedCheck = now;
         this._lastSpeedCount = this.stats.bruteChecked;
-      }
-
-      if (this.stats.bruteChecked % 100 === 0) {
         this.currentSource = `Brute-force: ${this.stats.bruteChecked.toLocaleString()} da quet, ${this.stats.speed} req/s`;
       }
-
-      await this._sleep(20);
     }
-
-    this.running = false;
-    this.currentSource = '';
   }
 
   async _checkGroupLink(code) {
