@@ -203,6 +203,27 @@ class ZaloScanner {
     return null;
   }
 
+  async checkCookie() {
+    if (!this.zaloCredentials) return { error: 'Chua co cookie' };
+    try {
+      const { cookie } = this.zaloCredentials;
+      const config = this._getAxiosConfig(10000);
+      config.headers = {
+        'Cookie': cookie,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://chat.zalo.me/',
+      };
+      const res = await axios.get('https://tt-profile-wpa.chat.zalo.me/api/social/profile/me', config);
+      if (res.data && res.data.data) {
+        const d = res.data.data;
+        return { ok: true, name: d.displayName || d.zaloName || 'Unknown', avatar: d.avatar };
+      }
+      return { error: 'Khong lay duoc thong tin. Cookie co the sai hoac het han.' };
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+
   async start(keywords) {
     if (this.running) return;
     this.keywords = keywords;

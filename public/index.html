@@ -510,7 +510,9 @@
             <div style="display:flex;gap:8px;align-items:center">
               <input type="text" id="zaloCookieInput" placeholder="zpw_sek=...; zpsid=...; ..." style="flex:1;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;outline:none">
               <button class="btn btn-green btn-sm" onclick="saveZaloCookie()">Luu</button>
+              <button class="btn btn-blue btn-sm" onclick="checkZaloCookie()">Check</button>
             </div>
+            <div id="zaloCookieCheck" style="font-size:12px;margin-top:6px;display:none"></div>
           </div>
           <div id="zaloQRWrap" style="display:none;margin-top:10px;text-align:center">
             <img id="zaloQRImg" style="max-width:200px;border-radius:8px;border:2px solid var(--border)">
@@ -1141,6 +1143,27 @@
       document.getElementById('btnZaloRefresh').style.display = 'none';
       document.getElementById('zaloLoginStatus').textContent = 'Chua dang nhap';
       document.getElementById('zaloLoginStatus').style.color = 'var(--text2)';
+    }
+
+    async function checkZaloCookie() {
+      var el = document.getElementById('zaloCookieCheck');
+      el.style.display = 'block';
+      el.style.color = 'var(--orange)';
+      el.textContent = 'Dang kiem tra...';
+      try {
+        var res = await fetch(API + '/api/zalo-scan/zalo-check', { headers: headers() });
+        var data = await res.json();
+        if (data.ok) {
+          el.style.color = 'var(--green)';
+          el.textContent = 'Cookie hop le! Tai khoan: ' + data.name;
+        } else {
+          el.style.color = 'var(--red)';
+          el.textContent = data.error || 'Cookie khong hop le';
+        }
+      } catch (e) {
+        el.style.color = 'var(--red)';
+        el.textContent = 'Loi ket noi server';
+      }
     }
 
     async function saveZaloCookie() {

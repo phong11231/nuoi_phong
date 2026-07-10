@@ -83,6 +83,11 @@ router.post('/zalo-login', (req, res) => {
   res.json({ ok: true, message: 'Da luu cookie Zalo' });
 });
 
+router.get('/zalo-check', async (req, res) => {
+  const result = await scanner.checkCookie();
+  res.json(result);
+});
+
 router.delete('/zalo-login', (req, res) => {
   scanner.setZaloCredentials(null);
   res.json({ ok: true });
