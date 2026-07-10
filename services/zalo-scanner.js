@@ -629,6 +629,9 @@ class ZaloScanner {
       { name: 'whtspgrouplink', url: 'https://whtspgrouplink.com/zalo-group-links/' },
       { name: 'vinazalo-sinhvien', url: 'https://vinazalo.vn/tong-hop-danh-sach-100-nhom-zalo-sinh-vien-khap-ca-nuoc/' },
       { name: 'vinazalo-vieclam', url: 'https://vinazalo.vn/danh-sach-100-nhom-zalo-viec-lam-tang-co-hoi-tim-kiem-cong-viec/' },
+      { name: 'balico', url: 'https://balico.com.vn/cach-tim-nhom-tren-zalo-chua-tham-gia/' },
+      { name: 'cellphones', url: 'https://cellphones.com.vn/sforum/tim-nhom-chat-zalo' },
+      { name: 'mytour', url: 'https://mytour.vn/en/blog/bai-viet/how-to-create-and-find-zalo-groups-using-group-codes.html' },
     ];
 
     for (const site of sites) {
@@ -653,18 +656,59 @@ class ZaloScanner {
 
   // ===== HELPER: Extract zalo.me/g/ links tu HTML =====
   async _extractZaloLinks(html, source) {
-    const linkRegex = /https?:\/\/zalo\.me\/g\/([a-zA-Z0-9]+)/g;
-    let match;
     const codes = new Set();
+    let match;
 
-    while ((match = linkRegex.exec(html)) !== null) {
-      codes.add(match[1]);
+    // Decode URL-encoded truoc (search engine encode link)
+    let decoded = html;
+    try {
+      decoded = decodeURIComponent(html.replace(/%25/g, '%'));
+    } catch (e) {
+      try { decoded = decodeURIComponent(html); } catch (e2) {}
     }
 
-    // Cung tim link dang zalo.me/g/ khong co https
-    const linkRegex2 = /zalo\.me\/g\/([a-zA-Z0-9]{5,25})/g;
-    while ((match = linkRegex2.exec(html)) !== null) {
-      codes.add(match[1]);
+    // Tim trong ca ban goc va ban decoded
+    for (const text of [html, decoded]) {
+      // Dang day du: https://zalo.me/g/xxx
+      const r1 = /https?:\/\/zalo\.me\/g\/([a-zA-Z0-9]{5,25})/g;
+      while ((match = r1.exec(text)) !== null) codes.add(match[1]);
+
+      // Dang khong co protocol
+      const r2 = /zalo\.me\/g\/([a-zA-Z0-9]{5,25})/g;
+      while ((match = r2.exec(text)) !== null) codes.add(match[1]);
+    }
+
+    // Tim dang URL-encoded trong HTML goc (chua decode): zalo.me%2Fg%2Fxxx
+    const r3 = /zalo\.me%2Fg%2F([a-zA-Z0-9]{5,25})/gi;
+    while ((match = r3.exec(html)) !== null) codes.add(match[1]);
+
+    // Tim dang double-encoded: zalo.me%252Fg%252Fxxx
+    const r4 = /zalo\.me%252Fg%252F([a-zA-Z0-9]{5,25})/gi;
+    while ((match = r4.exec(html)) !== null) codes.add(match[1]);
+
+    // Bing dung redirect: u=a1...base64... -> decode base64 tim link
+    const bingRedirects = html.match(/u=a1([A-Za-z0-9_-]+)/g);
+    if (bingRedirects) {
+      for (const br of bingRedirects) {
+        try {
+          const b64 = br.substring(4).replace(/-/g, '+').replace(/_/g, '/');
+          const decoded64 = Buffer.from(b64, 'base64').toString('utf-8');
+          const m = decoded64.match(/zalo\.me\/g\/([a-zA-Z0-9]{5,25})/);
+          if (m) codes.add(m[1]);
+        } catch (e) {}
+      }
+    }
+
+    // DuckDuckGo dung uddg=URL_ENCODED
+    const ddgLinks = html.match(/uddg=([^&"]+)/g);
+    if (ddgLinks) {
+      for (const dl of ddgLinks) {
+        try {
+          const url = decodeURIComponent(dl.substring(5));
+          const m = url.match(/zalo\.me\/g\/([a-zA-Z0-9]{5,25})/);
+          if (m) codes.add(m[1]);
+        } catch (e) {}
+      }
     }
 
     console.log(`[Crawl] ${source}: tim thay ${codes.size} link`);
