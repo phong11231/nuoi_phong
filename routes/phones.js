@@ -93,4 +93,18 @@ router.delete('/:id/proxy', async (req, res) => {
   res.json(phone);
 });
 
+router.put('/:id/proxy/switch', async (req, res) => {
+  const { index } = req.body;
+  if (index === undefined) return res.status(400).json({ error: 'Thieu index' });
+  const phone = await phoneManager.switchProxy(req.params.id, parseInt(index));
+  if (!phone) return res.status(404).json({ error: 'Khong tim thay phone hoac index sai' });
+  res.json(phone);
+});
+
+router.delete('/:id/proxy/:index', async (req, res) => {
+  const phone = phoneManager.removeProxyFromList(req.params.id, parseInt(req.params.index));
+  if (!phone) return res.status(404).json({ error: 'Khong tim thay phone hoac index sai' });
+  res.json(phone);
+});
+
 module.exports = router;

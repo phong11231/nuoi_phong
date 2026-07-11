@@ -711,6 +711,10 @@ class PhoneManager {
     const phone = this.phones.get(id);
     if (!phone) return null;
     phone.proxy = proxyStr;
+    // Them vao proxyList neu chua co
+    if (!phone.proxyList) phone.proxyList = [];
+    if (!phone.proxyList.includes(proxyStr)) phone.proxyList.push(proxyStr);
+    phone.activeProxyIndex = phone.proxyList.indexOf(proxyStr);
     this._saveData();
 
     if (phone.status !== 'running') return phone;
@@ -991,6 +995,45 @@ class PhoneManager {
 
     phone.proxy = null;
     phone.relayPort = null;
+    this._saveData();
+    return phone;
+  }
+
+  async switchProxy(id, index) {
+    const phone = this.phones.get(id);
+    if (!phone) return null;
+    if (!phone.proxyList || index < 0 || index >= phone.proxyList.length) return null;
+
+    // Xoa proxy cu neu dang chay
+    if (phone.proxy && phone.status === 'running') {
+      await this.removeProxy(id);
+    }
+
+    // Set proxy moi
+    const proxyStr = phone.proxyList[index];
+    return this.setProxy(id, proxyStr);
+  }
+
+  removeProxyFromList(id, index) {
+    const phone = this.phones.get(id);
+    if (!phone || !phone.proxyList) return null;
+    if (index < 0 || index >= phone.proxyList.length) return null;
+
+    const removedProxy = phone.proxyList[index];
+    phone.proxyList.splice(index, 1);
+
+    // Cap nhat activeProxyIndex
+    if (phone.proxyList.length === 0) {
+      phone.activeProxyIndex = -1;
+    } else if (phone.activeProxyIndex >= phone.proxyList.length) {
+      phone.activeProxyIndex = phone.proxyList.length - 1;
+    }
+
+    // Neu proxy dang active bi xoa
+    if (phone.proxy === removedProxy) {
+      phone.proxy = phone.proxyList.length > 0 ? phone.proxyList[phone.activeProxyIndex] : null;
+    }
+
     this._saveData();
     return phone;
   }
