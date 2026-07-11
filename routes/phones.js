@@ -93,6 +93,36 @@ router.delete('/:id/proxy', async (req, res) => {
   res.json(phone);
 });
 
+router.get('/:id/check-proxy/:index', async (req, res) => {
+  const phone = phoneManager.getPhone(req.params.id);
+  if (!phone) return res.status(404).json({ error: 'Khong tim thay phone' });
+  const index = parseInt(req.params.index);
+  if (!phone.proxyList || index < 0 || index >= phone.proxyList.length) {
+    return res.status(400).json({ error: 'Index proxy sai' });
+  }
+
+  const http = require('http');
+  const proxyStr = phone.proxyList[index];
+  const parts = proxyStr.split(':');
+  const host = parts[0], port = parseInt(parts[1]), user = parts[2], pass = parts[3];
+  const proxyHeaders = {};
+  if (user && pass) {
+    proxyHeaders['Proxy-Authorization'] = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
+  }
+  const proxyReq = http.request({
+    host: host, port: port, method: 'GET', path: 'http://api.ipify.org/',
+    headers: { ...proxyHeaders, Host: 'api.ipify.org' },
+    timeout: 10000,
+  }, (proxyRes) => {
+    let body = '';
+    proxyRes.on('data', d => body += d);
+    proxyRes.on('end', () => res.json({ ip: body.trim() }));
+  });
+  proxyReq.on('error', () => res.json({ error: 'Khong kiem tra duoc IP' }));
+  proxyReq.on('timeout', () => { proxyReq.destroy(); res.json({ error: 'Timeout' }); });
+  proxyReq.end();
+});
+
 router.put('/:id/proxy/switch', async (req, res) => {
   const { index } = req.body;
   if (index === undefined) return res.status(400).json({ error: 'Thieu index' });
