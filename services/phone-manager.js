@@ -418,6 +418,22 @@ class PhoneManager {
           }
         }
 
+        // Cai Gmail
+        const GMAIL_APK = '/root/gmail.apk';
+        if (fs.existsSync(GMAIL_APK)) {
+          console.log(`${phone.name}: Dang cai Gmail...`);
+          await runCmd(`docker exec -i ${c} sh -c 'cat > /data/local/tmp/gmail.apk' < ${GMAIL_APK}`);
+          const { err: gmailErr } = await runCmd(`docker exec ${c} pm install /data/local/tmp/gmail.apk`);
+          if (!gmailErr) {
+            phone.gmailInstalled = true;
+            this._saveData();
+            console.log(`${phone.name}: Gmail da cai xong`);
+          } else {
+            console.log(`${phone.name}: Loi cai Gmail`);
+          }
+          await runCmd(`docker exec ${c} rm -f /data/local/tmp/gmail.apk`);
+        }
+
         // An dau vet emulator
         await this._hideEmulatorTraces(phone);
         // Copy ADB key + connect ws-scrcpy
