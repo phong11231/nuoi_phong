@@ -13,6 +13,7 @@ try {
 }
 
 const REDROID_IMAGE = 'redroid/redroid:12.0.0-latest';
+const REDROID_IMAGE_GAPPS = 'teddynight/redroid:latest';
 const BASE_PORT = 5555;
 const ZALO_APK = '/root/zalo.apk';
 const DATA_FILE = path.join(__dirname, '..', 'phones-data.json');
@@ -219,7 +220,7 @@ class PhoneManager {
     return port;
   }
 
-  createPhone(name, folderId) {
+  createPhone(name, folderId, type) {
     const id = uuidv4();
     const port = this._getNextPort();
     const deviceConfig = PHONE_MODELS[Math.floor(Math.random() * PHONE_MODELS.length)];
@@ -229,6 +230,7 @@ class PhoneManager {
       id,
       name: name || `Phone ${this.phones.size + 1}`,
       folderId: folderId || null,
+      type: type || 'zalo',
       status: 'creating',
       port,
       containerName,
@@ -276,8 +278,9 @@ class PhoneManager {
       }
 
       const dev = phone.device;
+      const image = phone.type === 'gmail' ? REDROID_IMAGE_GAPPS : REDROID_IMAGE;
       const container = await docker.createContainer({
-        Image: REDROID_IMAGE,
+        Image: image,
         name: phone.containerName,
         ExposedPorts: { '5555/tcp': {} },
         Cmd: ['androidboot.redroid_gpu_mode=guest'],
