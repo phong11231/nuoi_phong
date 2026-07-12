@@ -634,6 +634,25 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="qrModal">
+    <div class="modal" style="max-width:420px;">
+      <h3>Paste QR <span id="qrPhoneName" style="color:var(--text2);font-size:14px;"></span></h3>
+      <input type="hidden" id="qrPhoneId">
+      <div id="qrDropZone" style="border:2px dashed var(--border);border-radius:8px;padding:30px;text-align:center;cursor:pointer;margin-bottom:12px;transition:border-color 0.2s;" onclick="document.getElementById('qrFileInput').click()">
+        <div style="font-size:32px;margin-bottom:8px;">📋</div>
+        <div style="font-size:14px;color:var(--text2);">Click de chon anh, hoac Ctrl+V paste tu clipboard</div>
+        <input type="file" id="qrFileInput" accept="image/*" style="display:none;" onchange="sendQRFile(this.files[0])">
+      </div>
+      <div id="qrPreview" style="display:none;text-align:center;margin-bottom:12px;">
+        <img id="qrPreviewImg" style="max-width:200px;max-height:200px;border-radius:8px;border:1px solid var(--border);">
+      </div>
+      <div id="qrStatus" style="font-size:13px;color:var(--text2);text-align:center;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline btn-sm" onclick="closeQRModal()">Dong</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="mediaModal">
     <div class="modal" style="max-width:520px;">
       <h3>Media <span id="mediaPhoneName" style="color:var(--text2);font-size:14px;"></span></h3>
@@ -842,6 +861,7 @@
             }
             <button class="btn btn-outline btn-sm" onclick="openProxyModal('${p.id}')">Proxy</button>
             ${p.status === 'running' ? '<button class="btn btn-outline btn-sm" onclick="openMediaModal(\'' + p.id + '\', \'' + safeName.replace(/'/g, "\\'") + '\')">Media</button>' : ''}
+            ${p.status === 'running' ? '<button class="btn btn-outline btn-sm" onclick="openQRModal(\'' + p.id + '\', \'' + safeName.replace(/'/g, "\\'") + '\')">QR</button>' : ''}
             ${p.status === 'running' ? '<button class="btn btn-outline btn-sm" onclick="checkProxy(\'' + p.id + '\')">Check IP</button>' : ''}
             <button class="btn btn-red btn-sm" onclick="deletePhone('${p.id}')">Xoa</button>
           </div>
@@ -1629,6 +1649,88 @@
           URL.revokeObjectURL(blobUrl);
         });
     }
+
+    // ========== QR PASTE ==========
+    function openQRModal(id, name) {
+      document.getElementById('qrPhoneId').value = id;
+      document.getElementById('qrPhoneName').textContent = '- ' + name;
+      document.getElementById('qrStatus').textContent = '';
+      document.getElementById('qrPreview').style.display = 'none';
+      document.getElementById('qrFileInput').value = '';
+      document.getElementById('qrModal').classList.add('active');
+    }
+    function closeQRModal() { document.getElementById('qrModal').classList.remove('active'); }
+
+    async function sendQRFile(file) {
+      if (!file) return;
+      var id = document.getElementById('qrPhoneId').value;
+      var statusEl = document.getElementById('qrStatus');
+      var previewEl = document.getElementById('qrPreview');
+      var previewImg = document.getElementById('qrPreviewImg');
+
+      // Show preview
+      var reader = new FileReader();
+      reader.onload = function(e) { previewImg.src = e.target.result; previewEl.style.display = ''; };
+      reader.readAsDataURL(file);
+
+      statusEl.style.color = 'var(--orange)';
+      statusEl.textContent = 'Dang gui QR vao phone...';
+      try {
+        var fd = new FormData();
+        fd.append('file', file);
+        var res = await fetch(API + '/api/phones/' + id + '/qr', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token },
+          body: fd
+        });
+        var data = await res.json();
+        if (data.ok) {
+          statusEl.style.color = 'var(--green)';
+          statusEl.textContent = 'Da gui QR thanh cong! Anh da mo tren phone.';
+        } else {
+          statusEl.style.color = 'var(--red)';
+          statusEl.textContent = 'Loi: ' + (data.error || 'Khong ro');
+        }
+      } catch (e) {
+        statusEl.style.color = 'var(--red)';
+        statusEl.textContent = 'Loi ket noi server';
+      }
+    }
+
+    // Clipboard paste (Ctrl+V)
+    document.addEventListener('paste', function(e) {
+      if (!document.getElementById('qrModal').classList.contains('active')) return;
+      var items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          var file = items[i].getAsFile();
+          if (file) sendQRFile(file);
+          e.preventDefault();
+          return;
+        }
+      }
+    });
+
+    // Drag & drop
+    (function() {
+      var zone = null;
+      document.addEventListener('DOMContentLoaded', function() { zone = document.getElementById('qrDropZone'); });
+      document.addEventListener('dragover', function(e) {
+        if (!document.getElementById('qrModal').classList.contains('active')) return;
+        e.preventDefault();
+        if (zone) zone.style.borderColor = 'var(--primary)';
+      });
+      document.addEventListener('dragleave', function(e) {
+        if (zone) zone.style.borderColor = 'var(--border)';
+      });
+      document.addEventListener('drop', function(e) {
+        if (!document.getElementById('qrModal').classList.contains('active')) return;
+        e.preventDefault();
+        if (zone) zone.style.borderColor = 'var(--border)';
+        if (e.dataTransfer.files.length > 0) sendQRFile(e.dataTransfer.files[0]);
+      });
+    })();
 
     // ========== MEDIA ==========
     function openMediaModal(id, name) {

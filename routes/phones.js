@@ -144,6 +144,23 @@ router.delete('/:id/proxy/:index', async (req, res) => {
   res.json(phone);
 });
 
+// Push QR image to phone and open it
+router.post('/:id/qr', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Thieu file' });
+  const phone = phoneManager.getPhone(req.params.id);
+  if (!phone) { fs.unlinkSync(req.file.path); return res.status(404).json({ error: 'Khong tim thay phone' }); }
+  if (phone.status !== 'running') { fs.unlinkSync(req.file.path); return res.status(400).json({ error: 'Phone chua chay' }); }
+  try {
+    const result = await phoneManager.pushQR(req.params.id, req.file.path);
+    fs.unlinkSync(req.file.path);
+    if (!result) return res.status(500).json({ error: 'Loi push QR' });
+    res.json(result);
+  } catch (e) {
+    try { fs.unlinkSync(req.file.path); } catch (_) {}
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Media upload/list/delete
 router.post('/:id/media', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Thieu file' });

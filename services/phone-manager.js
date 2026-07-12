@@ -1057,6 +1057,19 @@ class PhoneManager {
     return phone;
   }
 
+  async pushQR(id, filePath) {
+    const phone = this.phones.get(id);
+    if (!phone || phone.status !== 'running') return null;
+    const c = phone.containerName;
+    const destFile = '/sdcard/Pictures/qr_scan.png';
+    await runCmd(`docker exec ${c} mkdir -p /sdcard/Pictures`);
+    await runCmd(`docker cp "${filePath}" ${c}:${destFile}`);
+    await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${destFile}`);
+    await runCmd(`docker exec ${c} am start -a android.intent.action.VIEW -d file://${destFile} -t image/png`);
+    console.log(`${phone.name}: Da push QR va mo anh`);
+    return { ok: true };
+  }
+
   getRunningCount() {
     return Array.from(this.phones.values()).filter(p => p.status === 'running').length;
   }
