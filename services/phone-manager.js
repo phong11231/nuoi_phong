@@ -1061,14 +1061,14 @@ class PhoneManager {
     const phone = this.phones.get(id);
     if (!phone || phone.status !== 'running') return null;
     const c = phone.containerName;
-    const destFile = '/sdcard/Pictures/qr_scan.png';
-    await runCmd(`docker exec ${c} mkdir -p /sdcard/Pictures`);
-    await runCmd(`docker cp "${filePath}" ${c}:${destFile}`);
-    await runCmd(`docker exec ${c} chmod 644 ${destFile}`);
-    await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${destFile}`);
-    await runCmd(`docker exec ${c} content insert --uri content://media/external/images/media --bind _data:s:${destFile} --bind mime_type:s:image/png --bind _display_name:s:qr_scan.png`);
-    await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_MOUNTED -d file:///sdcard`);
-    await runCmd(`docker exec ${c} am start -a android.intent.action.VIEW -d file://${destFile} -t image/png`);
+    const realFile = '/data/media/0/Pictures/qr_scan.png';
+    const sdcardFile = '/sdcard/Pictures/qr_scan.png';
+    await runCmd(`docker exec ${c} mkdir -p /data/media/0/Pictures`);
+    await runCmd(`docker cp "${filePath}" ${c}:${realFile}`);
+    await runCmd(`docker exec ${c} chown media_rw:media_rw ${realFile}`);
+    await runCmd(`docker exec ${c} chmod 664 ${realFile}`);
+    await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${sdcardFile}`);
+    await runCmd(`docker exec ${c} am start -a android.intent.action.VIEW -d file://${sdcardFile} -t image/png`);
     console.log(`${phone.name}: Da push QR va mo anh`);
     return { ok: true };
   }
@@ -1083,18 +1083,17 @@ class PhoneManager {
     const c = phone.containerName;
     const ext = path.extname(originalName).toLowerCase();
     const isVideo = ['.mp4', '.3gp', '.mkv', '.avi', '.mov'].includes(ext);
-    const destDir = isVideo ? '/sdcard/DCIM/Camera' : '/sdcard/Pictures';
-    const destFile = `${destDir}/${originalName}`;
-    await runCmd(`docker exec ${c} mkdir -p ${destDir}`);
-    await runCmd(`docker cp "${filePath}" ${c}:${destFile}`);
-    await runCmd(`docker exec ${c} chmod 644 ${destFile}`);
-    // Force media scan bang nhieu cach
-    await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${destFile}`);
-    const mimeType = isVideo ? 'video/mp4' : (ext === '.png' ? 'image/png' : 'image/jpeg');
-    await runCmd(`docker exec ${c} content insert --uri content://media/external/images/media --bind _data:s:${destFile} --bind mime_type:s:${mimeType} --bind _display_name:s:${originalName}`);
-    await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_MOUNTED -d file:///sdcard`);
+    const realDir = isVideo ? '/data/media/0/DCIM/Camera' : '/data/media/0/Pictures';
+    const sdcardDir = isVideo ? '/sdcard/DCIM/Camera' : '/sdcard/Pictures';
+    const realFile = `${realDir}/${originalName}`;
+    const sdcardFile = `${sdcardDir}/${originalName}`;
+    await runCmd(`docker exec ${c} mkdir -p ${realDir}`);
+    await runCmd(`docker cp "${filePath}" ${c}:${realFile}`);
+    await runCmd(`docker exec ${c} chown media_rw:media_rw ${realFile}`);
+    await runCmd(`docker exec ${c} chmod 664 ${realFile}`);
+    await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${sdcardFile}`);
     if (!phone.mediaFiles) phone.mediaFiles = [];
-    const entry = { name: originalName, path: destFile, type: isVideo ? 'video' : 'image', uploadedAt: new Date().toISOString() };
+    const entry = { name: originalName, path: sdcardFile, realPath: realFile, type: isVideo ? 'video' : 'image', uploadedAt: new Date().toISOString() };
     phone.mediaFiles.push(entry);
     this._saveData();
     console.log(`${phone.name}: Da upload ${originalName} vao ${destFile}`);
@@ -1115,7 +1114,8 @@ class PhoneManager {
     if (idx === -1) return null;
     const media = phone.mediaFiles[idx];
     if (phone.status === 'running') {
-      await runCmd(`docker exec ${phone.containerName} rm -f "${media.path}"`);
+      const rmPath = media.realPath || media.path.replace('/sdcard/', '/data/media/0/');
+      await runCmd(`docker exec ${phone.containerName} rm -f "${rmPath}"`);
       await runCmd(`docker exec ${phone.containerName} am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${media.path}`);
     }
     phone.mediaFiles.splice(idx, 1);
