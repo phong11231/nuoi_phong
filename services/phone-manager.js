@@ -1060,6 +1060,48 @@ class PhoneManager {
   getRunningCount() {
     return Array.from(this.phones.values()).filter(p => p.status === 'running').length;
   }
+
+  async pushMedia(id, filePath, originalName) {
+    const phone = this.phones.get(id);
+    if (!phone || phone.status !== 'running') return null;
+    const c = phone.containerName;
+    const ext = path.extname(originalName).toLowerCase();
+    const isVideo = ['.mp4', '.3gp', '.mkv', '.avi', '.mov'].includes(ext);
+    const destDir = isVideo ? '/sdcard/DCIM/Camera' : '/sdcard/Pictures';
+    const destFile = `${destDir}/${originalName}`;
+    await runCmd(`docker exec ${c} mkdir -p ${destDir}`);
+    await runCmd(`docker cp "${filePath}" ${c}:${destFile}`);
+    await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${destFile}`);
+    if (!phone.mediaFiles) phone.mediaFiles = [];
+    const entry = { name: originalName, path: destFile, type: isVideo ? 'video' : 'image', uploadedAt: new Date().toISOString() };
+    phone.mediaFiles.push(entry);
+    this._saveData();
+    console.log(`${phone.name}: Da upload ${originalName} vao ${destFile}`);
+    return entry;
+  }
+
+  getMedia(id) {
+    const phone = this.phones.get(id);
+    if (!phone) return null;
+    return phone.mediaFiles || [];
+  }
+
+  async deleteMedia(id, filename) {
+    const phone = this.phones.get(id);
+    if (!phone) return null;
+    if (!phone.mediaFiles) phone.mediaFiles = [];
+    const idx = phone.mediaFiles.findIndex(m => m.name === filename);
+    if (idx === -1) return null;
+    const media = phone.mediaFiles[idx];
+    if (phone.status === 'running') {
+      await runCmd(`docker exec ${phone.containerName} rm -f "${media.path}"`);
+      await runCmd(`docker exec ${phone.containerName} am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${media.path}`);
+    }
+    phone.mediaFiles.splice(idx, 1);
+    this._saveData();
+    console.log(`${phone.name}: Da xoa ${filename}`);
+    return phone;
+  }
 }
 
 const phoneManager = new PhoneManager();

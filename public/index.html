@@ -634,6 +634,30 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="mediaModal">
+    <div class="modal" style="max-width:520px;">
+      <h3>Media <span id="mediaPhoneName" style="color:var(--text2);font-size:14px;"></span></h3>
+      <input type="hidden" id="mediaPhoneId">
+      <div style="margin-bottom:12px;">
+        <div style="display:flex;gap:8px;">
+          <label class="btn btn-primary btn-sm" style="cursor:pointer;flex:1;text-align:center;">
+            Upload anh
+            <input type="file" id="mediaFileInput" accept="image/*" multiple style="display:none;" onchange="uploadMedia('image')">
+          </label>
+          <label class="btn btn-blue btn-sm" style="cursor:pointer;flex:1;text-align:center;">
+            Upload video
+            <input type="file" id="mediaVideoInput" accept="video/*" multiple style="display:none;" onchange="uploadMedia('video')">
+          </label>
+        </div>
+        <div id="mediaUploadStatus" style="font-size:12px;margin-top:6px;color:var(--text2);"></div>
+      </div>
+      <div id="mediaList" style="max-height:350px;overflow-y:auto;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline btn-sm" onclick="closeMediaModal()">Dong</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="proxyModal">
     <div class="modal">
       <h3>Cau hinh Proxy</h3>
@@ -817,6 +841,7 @@
               : p.status === 'running' ? '<button class="btn btn-red btn-sm" onclick="stopPhone(\'' + p.id + '\')">Tat</button>' : ''
             }
             <button class="btn btn-outline btn-sm" onclick="openProxyModal('${p.id}')">Proxy</button>
+            ${p.status === 'running' ? '<button class="btn btn-outline btn-sm" onclick="openMediaModal(\'' + p.id + '\', \'' + safeName.replace(/'/g, "\\'") + '\')">Media</button>' : ''}
             ${p.status === 'running' ? '<button class="btn btn-outline btn-sm" onclick="checkProxy(\'' + p.id + '\')">Check IP</button>' : ''}
             <button class="btn btn-red btn-sm" onclick="deletePhone('${p.id}')">Xoa</button>
           </div>
@@ -1603,6 +1628,80 @@
           a.click();
           URL.revokeObjectURL(blobUrl);
         });
+    }
+
+    // ========== MEDIA ==========
+    function openMediaModal(id, name) {
+      document.getElementById('mediaPhoneId').value = id;
+      document.getElementById('mediaPhoneName').textContent = '- ' + name;
+      document.getElementById('mediaUploadStatus').textContent = '';
+      document.getElementById('mediaFileInput').value = '';
+      document.getElementById('mediaVideoInput').value = '';
+      loadMediaList(id);
+      document.getElementById('mediaModal').classList.add('active');
+    }
+    function closeMediaModal() { document.getElementById('mediaModal').classList.remove('active'); }
+
+    async function loadMediaList(id) {
+      var el = document.getElementById('mediaList');
+      el.innerHTML = '<div style="color:var(--text2);font-size:13px;">Dang tai...</div>';
+      try {
+        var res = await fetch(API + '/api/phones/' + id + '/media', { headers: headers() });
+        var list = await res.json();
+        if (!list.length) {
+          el.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:12px 0;">Chua co file nao</div>';
+          return;
+        }
+        el.innerHTML = list.map(function(m, i) {
+          var icon = m.type === 'video' ? '🎬' : '🖼️';
+          return '<div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;background:var(--surface2);margin-bottom:6px;">'
+            + '<span style="font-size:20px;">' + icon + '</span>'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(m.name) + '</div>'
+            + '<div style="font-size:11px;color:var(--text2);">' + m.type + ' - ' + new Date(m.uploadedAt).toLocaleString('vi-VN') + '</div>'
+            + '</div>'
+            + '<button class="btn btn-red btn-sm" style="padding:4px 10px;font-size:11px;" onclick="deleteMedia(\'' + id + '\',\'' + esc(m.name).replace(/'/g, "\\'") + '\')">Xoa</button>'
+            + '</div>';
+        }).join('');
+      } catch (e) {
+        el.innerHTML = '<div style="color:var(--red);font-size:13px;">Loi tai danh sach</div>';
+      }
+    }
+
+    async function uploadMedia(type) {
+      var id = document.getElementById('mediaPhoneId').value;
+      var input = type === 'video' ? document.getElementById('mediaVideoInput') : document.getElementById('mediaFileInput');
+      var files = input.files;
+      if (!files.length) return;
+      var statusEl = document.getElementById('mediaUploadStatus');
+      statusEl.style.color = 'var(--orange)';
+      statusEl.textContent = 'Dang upload ' + files.length + ' file...';
+      var ok = 0;
+      for (var i = 0; i < files.length; i++) {
+        var fd = new FormData();
+        fd.append('file', files[i]);
+        try {
+          var res = await fetch(API + '/api/phones/' + id + '/media', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token },
+            body: fd
+          });
+          if (res.ok) ok++;
+          statusEl.textContent = 'Upload ' + (i + 1) + '/' + files.length + '...';
+        } catch (e) {}
+      }
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = 'Da upload ' + ok + '/' + files.length + ' file thanh cong!';
+      input.value = '';
+      loadMediaList(id);
+    }
+
+    async function deleteMedia(id, filename) {
+      if (!confirm('Xoa file "' + filename + '" khoi phone?')) return;
+      try {
+        await fetch(API + '/api/phones/' + id + '/media/' + encodeURIComponent(filename), { method: 'DELETE', headers: headers() });
+        loadMediaList(id);
+      } catch (e) { alert('Loi xoa file'); }
     }
 
     // ========== INIT ==========

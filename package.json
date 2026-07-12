@@ -12,6 +12,7 @@
     "dockerode": "^4.0.0",
     "ws": "^8.16.0",
     "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
     "uuid": "^9.0.0",
     "axios": "^1.7.0",
     "https-proxy-agent": "^7.0.0",

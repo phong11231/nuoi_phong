@@ -1,7 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { phoneManager } = require('../services/phone-manager');
 const { authMiddleware } = require('../services/auth');
+
+const uploadDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const upload = multer({ dest: uploadDir, limits: { fileSize: 100 * 1024 * 1024 } });
 
 router.use(authMiddleware);
 
@@ -135,6 +142,35 @@ router.delete('/:id/proxy/:index', async (req, res) => {
   const phone = phoneManager.removeProxyFromList(req.params.id, parseInt(req.params.index));
   if (!phone) return res.status(404).json({ error: 'Khong tim thay phone hoac index sai' });
   res.json(phone);
+});
+
+// Media upload/list/delete
+router.post('/:id/media', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Thieu file' });
+  const phone = phoneManager.getPhone(req.params.id);
+  if (!phone) { fs.unlinkSync(req.file.path); return res.status(404).json({ error: 'Khong tim thay phone' }); }
+  if (phone.status !== 'running') { fs.unlinkSync(req.file.path); return res.status(400).json({ error: 'Phone chua chay' }); }
+  try {
+    const entry = await phoneManager.pushMedia(req.params.id, req.file.path, req.file.originalname);
+    fs.unlinkSync(req.file.path);
+    if (!entry) return res.status(500).json({ error: 'Loi upload' });
+    res.json(entry);
+  } catch (e) {
+    try { fs.unlinkSync(req.file.path); } catch (_) {}
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/:id/media', (req, res) => {
+  const media = phoneManager.getMedia(req.params.id);
+  if (media === null) return res.status(404).json({ error: 'Khong tim thay phone' });
+  res.json(media);
+});
+
+router.delete('/:id/media/:filename', async (req, res) => {
+  const result = await phoneManager.deleteMedia(req.params.id, decodeURIComponent(req.params.filename));
+  if (!result) return res.status(404).json({ error: 'Khong tim thay file hoac phone' });
+  res.json({ success: true });
 });
 
 module.exports = router;
