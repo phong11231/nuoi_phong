@@ -1064,7 +1064,10 @@ class PhoneManager {
     const destFile = '/sdcard/Pictures/qr_scan.png';
     await runCmd(`docker exec ${c} mkdir -p /sdcard/Pictures`);
     await runCmd(`docker cp "${filePath}" ${c}:${destFile}`);
+    await runCmd(`docker exec ${c} chmod 644 ${destFile}`);
     await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${destFile}`);
+    await runCmd(`docker exec ${c} content insert --uri content://media/external/images/media --bind _data:s:${destFile} --bind mime_type:s:image/png --bind _display_name:s:qr_scan.png`);
+    await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_MOUNTED -d file:///sdcard`);
     await runCmd(`docker exec ${c} am start -a android.intent.action.VIEW -d file://${destFile} -t image/png`);
     console.log(`${phone.name}: Da push QR va mo anh`);
     return { ok: true };
@@ -1084,7 +1087,12 @@ class PhoneManager {
     const destFile = `${destDir}/${originalName}`;
     await runCmd(`docker exec ${c} mkdir -p ${destDir}`);
     await runCmd(`docker cp "${filePath}" ${c}:${destFile}`);
+    await runCmd(`docker exec ${c} chmod 644 ${destFile}`);
+    // Force media scan bang nhieu cach
     await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${destFile}`);
+    const mimeType = isVideo ? 'video/mp4' : (ext === '.png' ? 'image/png' : 'image/jpeg');
+    await runCmd(`docker exec ${c} content insert --uri content://media/external/images/media --bind _data:s:${destFile} --bind mime_type:s:${mimeType} --bind _display_name:s:${originalName}`);
+    await runCmd(`docker exec ${c} am broadcast -a android.intent.action.MEDIA_MOUNTED -d file:///sdcard`);
     if (!phone.mediaFiles) phone.mediaFiles = [];
     const entry = { name: originalName, path: destFile, type: isVideo ? 'video' : 'image', uploadedAt: new Date().toISOString() };
     phone.mediaFiles.push(entry);
