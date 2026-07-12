@@ -16,6 +16,7 @@ const REDROID_IMAGE = 'redroid/redroid:12.0.0-latest';
 const REDROID_IMAGE_GAPPS = 'teddynight/redroid:latest';
 const BASE_PORT = 5555;
 const ZALO_APK = '/root/zalo.apk';
+const LABAN_APK = '/root/laban.apk';
 const DATA_FILE = path.join(__dirname, '..', 'phones-data.json');
 
 const PHONE_MODELS = [
@@ -435,6 +436,19 @@ class PhoneManager {
             console.log(`${phone.name}: Loi cai Gmail`);
           }
           await runCmd(`docker exec ${c} rm -f /data/local/tmp/gmail.apk`);
+        }
+
+        // Cai Laban Key (ban phim tieng Viet)
+        if (fs.existsSync(LABAN_APK)) {
+          console.log(`${phone.name}: Dang cai Laban Key...`);
+          await runCmd(`docker exec -i ${c} sh -c 'cat > /data/local/tmp/laban.apk' < ${LABAN_APK}`);
+          const { err: labanErr } = await runCmd(`docker exec ${c} pm install /data/local/tmp/laban.apk`);
+          if (!labanErr) {
+            console.log(`${phone.name}: Laban Key da cai xong`);
+          } else {
+            console.log(`${phone.name}: Loi cai Laban Key`);
+          }
+          await runCmd(`docker exec ${c} rm -f /data/local/tmp/laban.apk`);
         }
 
         // An dau vet emulator
