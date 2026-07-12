@@ -444,7 +444,9 @@ class PhoneManager {
           await runCmd(`docker exec -i ${c} sh -c 'cat > /data/local/tmp/laban.apk' < ${LABAN_APK}`);
           const { err: labanErr } = await runCmd(`docker exec ${c} pm install /data/local/tmp/laban.apk`);
           if (!labanErr) {
-            console.log(`${phone.name}: Laban Key da cai xong`);
+            await runCmd(`docker exec ${c} ime enable com.vng.inputmethod.labankey/.LatinIME`);
+            await runCmd(`docker exec ${c} ime set com.vng.inputmethod.labankey/.LatinIME`);
+            console.log(`${phone.name}: Laban Key da cai + kich hoat`);
           } else {
             console.log(`${phone.name}: Loi cai Laban Key`);
           }
@@ -1136,6 +1138,26 @@ class PhoneManager {
     this._saveData();
     console.log(`${phone.name}: Da xoa ${filename}`);
     return phone;
+  }
+
+  async sendText(id, text) {
+    const phone = this.phones.get(id);
+    if (!phone || phone.status !== 'running') return null;
+    const c = phone.containerName;
+    const b64 = Buffer.from(text, 'utf8').toString('base64');
+    await runCmd(`docker exec ${c} sh -c "echo '${b64}' | base64 -d > /data/local/tmp/_text.txt"`);
+    const hasUnicode = /[^\x00-\x7F]/.test(text);
+    if (!hasUnicode) {
+      const escaped = text.replace(/ /g, '%s').replace(/'/g, "'\\''");
+      await runCmd(`docker exec ${c} input text '${escaped}'`);
+    } else {
+      await runCmd(`docker exec ${c} sh -c "
+        content call --uri content://com.vng.inputmethod.labankey --method commitText --arg \\\"$(cat /data/local/tmp/_text.txt)\\\" 2>/dev/null;
+        input keyevent 279 2>/dev/null
+      "`);
+    }
+    console.log(`${phone.name}: Da gui text: ${text.substring(0, 50)}`);
+    return { ok: true };
   }
 }
 

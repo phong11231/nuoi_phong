@@ -190,4 +190,19 @@ router.delete('/:id/media/:filename', async (req, res) => {
   res.json({ success: true });
 });
 
+router.post('/:id/send-text', async (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'Thieu text' });
+  const phone = phoneManager.getPhone(req.params.id);
+  if (!phone) return res.status(404).json({ error: 'Khong tim thay phone' });
+  if (phone.status !== 'running') return res.status(400).json({ error: 'Phone chua chay' });
+  try {
+    const result = await phoneManager.sendText(req.params.id, text);
+    if (!result) return res.status(500).json({ error: 'Loi gui text' });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
